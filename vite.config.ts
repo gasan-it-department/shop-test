@@ -5,7 +5,23 @@ import tsconfigPaths from "vite-tsconfig-paths"
 // the cli tunnels a public https host to this dev server. without the hmr
 // block below the browser tries to open a ws to localhost from inside the
 // admin iframe and hot reload dies.
-const host = new URL(process.env.SHOPIFY_APP_URL || "http://localhost").hostname
+//
+// this only matters to the dev server, so a missing or malformed
+// SHOPIFY_APP_URL falls back instead of throwing — an unparseable value used
+// to kill `react-router build` with a bare "Invalid URL" and no mention of
+// which variable was at fault.
+function appHost(): string {
+  const raw = process.env.SHOPIFY_APP_URL
+  if (!raw) return "localhost"
+  try {
+    return new URL(raw).hostname
+  } catch {
+    console.warn(`[vite] SHOPIFY_APP_URL is not a url (${raw}), using localhost`)
+    return "localhost"
+  }
+}
+
+const host = appHost()
 
 const hmrConfig =
   host === "localhost"
