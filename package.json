@@ -11,7 +11,7 @@
     "app:url": "node scripts/set-app-url.mjs",
     "app:deploy": "shopify app deploy",
     "build": "prisma generate && react-router build",
-    "start": "react-router-serve ./build/server/index.js",
+    "start": "prisma migrate deploy && node prisma/seed.mjs && react-router-serve ./build/server/index.js",
     "setup": "prisma generate && prisma migrate deploy",
     "db:deploy": "prisma migrate deploy",
     "seed": "node prisma/seed.mjs",
