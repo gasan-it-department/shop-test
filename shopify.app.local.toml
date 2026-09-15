@@ -16,7 +16,7 @@ application_url = "https://placeholder.trycloudflare.com"
 embedded = true
 
 [access_scopes]
-scopes = "read_products,read_customers,write_customers"
+scopes = "read_products"
 use_legacy_install_flow = false
 
 [auth]

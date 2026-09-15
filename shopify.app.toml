@@ -21,9 +21,12 @@ application_url = "https://shop-test-production-53fc.up.railway.app"
 embedded = true
 
 [access_scopes]
-# keep minimal, every extra scope is a line on the install screen and a
-# question at app review
-scopes = "read_products,read_customers,write_customers"
+# read_customers / write_customers were removed: the forum never reads a
+# customer record. shoppers are identified by logged_in_customer_id on the
+# signed proxy request and stored as an hmac. asking for customer scopes put
+# the app under protected customer data rules, which gates admin api access
+# until approved — and unapproved access comes back as a blanket 403.
+scopes = "read_products"
 use_legacy_install_flow = false
 
 [auth]

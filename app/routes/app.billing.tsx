@@ -9,14 +9,24 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // check() only inspects. require() is the one that redirects to the charge
   // page.
-  const { hasActivePayment, appSubscriptions } = await billing.check({
-    plans: [PRO_PLAN],
-    isTest: process.env.NODE_ENV !== "production",
-  })
+  //
+  // wrapped because the admin client throws on a non-2xx — a 403 here would
+  // otherwise 500 the page, and "we couldn't read your plan" is a far better
+  // outcome than a dead screen.
+  try {
+    const { hasActivePayment, appSubscriptions } = await billing.check({
+      plans: [PRO_PLAN],
+      isTest: process.env.NODE_ENV !== "production",
+    })
 
-  return {
-    hasActivePayment,
-    subscriptionName: appSubscriptions[0]?.name ?? null,
+    return {
+      billingApiOk: true,
+      hasActivePayment,
+      subscriptionName: appSubscriptions[0]?.name ?? null,
+    }
+  } catch (error) {
+    console.error("[billing] check failed:", error)
+    return { billingApiOk: false, hasActivePayment: false, subscriptionName: null }
   }
 }
 
@@ -36,7 +46,22 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function Billing() {
-  const { hasActivePayment, subscriptionName } = useLoaderData<typeof loader>()
+  const { hasActivePayment, subscriptionName, billingApiOk } = useLoaderData<typeof loader>()
+
+  if (!billingApiOk) {
+    return (
+      <s-page heading="Plan">
+        <s-section>
+          <s-banner tone="warning" heading="Plan status unavailable">
+            <s-paragraph>
+              The Billing API could not be reached. This usually means the app
+              is not yet approved for the scopes it requests.
+            </s-paragraph>
+          </s-banner>
+        </s-section>
+      </s-page>
+    )
+  }
 
   return (
     <s-page heading="Plan">

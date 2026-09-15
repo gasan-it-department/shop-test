@@ -4,55 +4,81 @@ import type { LoaderFunctionArgs } from "react-router"
 import prisma from "../db.server"
 import { authenticate } from "../shopify.server"
 
+interface ShopOverview {
+  name: string
+  ianaTimezone: string
+}
+
+/**
+ * Shop name and timezone from the Admin API.
+ *
+ * Returns null on any failure instead of throwing. The admin client throws on
+ * a non-2xx (403 when scopes or protected-customer-data approval don't cover
+ * the query), so checking the response body alone isn't enough — the throw
+ * happens before there is a body to check.
+ *
+ * Nothing on this page is worth a 500. The shop domain is already in the
+ * session, so a failed call costs polish, not function.
+ */
+async function fetchShopOverview(
+  admin: Awaited<ReturnType<typeof authenticate.admin>>["admin"],
+): Promise<ShopOverview | null> {
+  try {
+    // primaryDomain is deliberately not requested — it is the field most
+    // likely to be scope-gated, and the storefront url is derivable from the
+    // shop domain anyway.
+    const response = await admin.graphql(`#graphql
+      query ShopOverview {
+        shop {
+          name
+          ianaTimezone
+        }
+      }
+    `)
+
+    const body = (await response.json()) as {
+      data?: { shop?: ShopOverview }
+      errors?: unknown
+    }
+
+    if (!body.data?.shop) {
+      console.error("[app] ShopOverview returned no data:", JSON.stringify(body.errors ?? body))
+      return null
+    }
+
+    return body.data.shop
+  } catch (error) {
+    console.error("[app] ShopOverview request failed:", error)
+    return null
+  }
+}
+
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session, admin } = await authenticate.admin(request)
 
-  // one round trip. admin api calls cost points against a leaky bucket, so
-  // batch fields rather than firing several queries.
-  const response = await admin.graphql(`#graphql
-    query ShopOverview {
-      shop {
-        name
-        ianaTimezone
-        primaryDomain { url }
-      }
-    }
-  `)
-
-  // never assume the query succeeded. a throttle, a missing scope or a field
-  // that moved between api versions all come back as a 200 with errors and a
-  // null data — and `data.shop.name` on that is a TypeError, which renders as
-  // a blank "Application Error" inside the admin iframe with nothing to go on.
-  const body = (await response.json()) as {
-    data?: {
-      shop?: { name: string; ianaTimezone: string; primaryDomain?: { url: string } }
-    }
-    errors?: unknown
-  }
-
-  if (!body.data?.shop) {
-    console.error("[app] ShopOverview query failed:", JSON.stringify(body.errors ?? body))
-  }
-
-  const shopData = body.data?.shop
-
-  const shop = await prisma.shop.findUnique({
-    where: { domain: session.shop },
-    include: { _count: { select: { posts: true, members: true, comments: true } } },
-  })
+  const [shopData, shop] = await Promise.all([
+    fetchShopOverview(admin),
+    prisma.shop.findUnique({
+      where: { domain: session.shop },
+      include: { _count: { select: { posts: true, members: true, comments: true } } },
+    }),
+  ])
 
   return {
-    shopName: shopData?.name ?? session.shop,
-    // from shopify, never hard-coded. falls back to UTC rather than to a
-    // guess, since a wrong timezone is worse than an obviously neutral one.
+    shopName: shopData?.name ?? session.shop.replace(".myshopify.com", ""),
+    // from shopify, never hard-coded. falls back to UTC rather than a guess,
+    // since a wrong timezone is worse than an obviously neutral one.
     timezone: shopData?.ianaTimezone ?? "UTC",
-    storefrontUrl: shopData?.primaryDomain?.url ?? `https://${session.shop}`,
+    storefrontUrl: `https://${session.shop}`,
     counts: shop?._count ?? { posts: 0, members: 0, comments: 0 },
+    // surfaced in the ui so a degraded page says so instead of quietly lying
+    adminApiOk: shopData !== null,
   }
 }
 
 export default function Index() {
-  const { shopName, timezone, storefrontUrl, counts } = useLoaderData<typeof loader>()
+  const { shopName, timezone, storefrontUrl, counts, adminApiOk } =
+    useLoaderData<typeof loader>()
 
   return (
     <s-page heading={shopName}>
@@ -66,7 +92,9 @@ export default function Index() {
 
           <s-stack direction="inline" gap="small">
             <s-text>Shop timezone</s-text>
-            <s-badge tone="info">{timezone}</s-badge>
+            <s-badge tone={adminApiOk ? "info" : "warning"}>
+              {adminApiOk ? timezone : `${timezone} (Admin API unavailable)`}
+            </s-badge>
           </s-stack>
 
           <s-paragraph tone="neutral">
