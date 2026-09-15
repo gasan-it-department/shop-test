@@ -13,10 +13,11 @@
 # deploy silently points the live app at a dead tunnel. Local dev uses
 # shopify.app.local.toml instead.
 
-name = "shopify-practice"
-handle = "shopify-practice"
-client_id = "REPLACE_VIA_SHOPIFY_APP_CONFIG_LINK"
-application_url = "https://REPLACE.up.railway.app"
+name = "Community Forum"
+# shopify assigned the -2 suffix on first deploy; handles are globally unique
+handle = "thatonedev-community-forum-2"
+client_id = "db8490dac409322a45f8abc0f42797be"
+application_url = "https://shop-test-production-53fc.up.railway.app"
 embedded = true
 
 [access_scopes]
@@ -31,7 +32,7 @@ use_legacy_install_flow = false
 # /auth/shopify/callback and /api/auth/callback come from the old Remix
 # template and this app never serves them.
 redirect_urls = [
-  "https://REPLACE.up.railway.app/auth/callback"
+  "https://shop-test-production-53fc.up.railway.app/auth/callback"
 ]
 
 [webhooks]
@@ -54,7 +55,7 @@ api_version = "2026-07"
 # storefront traffic without CORS and without exposing our own domain:
 #   https://<shop>/apps/forum/posts  ->  /proxy/posts, signed with the secret
 [app_proxy]
-url = "https://REPLACE.up.railway.app/proxy"
+url = "https://shop-test-production-53fc.up.railway.app/proxy"
 subpath = "forum"
 prefix = "apps"
 

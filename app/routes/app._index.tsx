@@ -19,9 +19,22 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   `)
 
-  const { data } = (await response.json()) as {
-    data: { shop: { name: string; ianaTimezone: string; primaryDomain: { url: string } } }
+  // never assume the query succeeded. a throttle, a missing scope or a field
+  // that moved between api versions all come back as a 200 with errors and a
+  // null data — and `data.shop.name` on that is a TypeError, which renders as
+  // a blank "Application Error" inside the admin iframe with nothing to go on.
+  const body = (await response.json()) as {
+    data?: {
+      shop?: { name: string; ianaTimezone: string; primaryDomain?: { url: string } }
+    }
+    errors?: unknown
   }
+
+  if (!body.data?.shop) {
+    console.error("[app] ShopOverview query failed:", JSON.stringify(body.errors ?? body))
+  }
+
+  const shopData = body.data?.shop
 
   const shop = await prisma.shop.findUnique({
     where: { domain: session.shop },
@@ -29,10 +42,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
   })
 
   return {
-    shopName: data.shop.name,
-    // from shopify, never hard-coded
-    timezone: data.shop.ianaTimezone,
-    storefrontUrl: data.shop.primaryDomain.url,
+    shopName: shopData?.name ?? session.shop,
+    // from shopify, never hard-coded. falls back to UTC rather than to a
+    // guess, since a wrong timezone is worse than an obviously neutral one.
+    timezone: shopData?.ianaTimezone ?? "UTC",
+    storefrontUrl: shopData?.primaryDomain?.url ?? `https://${session.shop}`,
     counts: shop?._count ?? { posts: 0, members: 0, comments: 0 },
   }
 }

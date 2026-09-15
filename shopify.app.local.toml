@@ -9,8 +9,8 @@
 # Point this at its own Partner app rather than the deployed one, otherwise a
 # dev session repoints the live app's urls at your laptop.
 
-name = "shopify-practice-dev"
-handle = "shopify-practice-dev"
+name = "Community Forum (dev)"
+handle = "thatonedev-community-forum-dev"
 client_id = "REPLACE_VIA_SHOPIFY_APP_CONFIG_LINK"
 application_url = "https://placeholder.trycloudflare.com"
 embedded = true
