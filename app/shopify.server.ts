@@ -10,12 +10,48 @@ import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prism
 import prisma from "./db.server"
 import { PRO_PLAN } from "./lib/plans"
 
+// hosting dashboards show domains without a scheme, and pasting one verbatim
+// gets you "Invalid appUrl configuration" from deep inside the library with no
+// mention of which variable is wrong. normalise it, and fail with something
+// actionable if it's still not a url.
+function resolveAppUrl(): string {
+  const raw = process.env.SHOPIFY_APP_URL?.trim()
+
+  if (!raw) {
+    throw new Error(
+      "SHOPIFY_APP_URL is not set. It must be the app's public https url, " +
+        "e.g. https://your-app.up.railway.app",
+    )
+  }
+
+  const withScheme = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
+  if (withScheme !== raw) {
+    console.warn(`[shopify] SHOPIFY_APP_URL had no scheme, using ${withScheme}`)
+  }
+
+  let parsed: URL
+  try {
+    parsed = new URL(withScheme)
+  } catch {
+    throw new Error(
+      `SHOPIFY_APP_URL is not a valid url: ${JSON.stringify(raw)}. ` +
+        "Expected something like https://your-app.up.railway.app",
+    )
+  }
+
+  // trailing slashes end up doubled in redirect urls, which then no longer
+  // match what's registered in shopify.app.toml
+  return parsed.origin
+}
+
+export const appUrl = resolveAppUrl()
+
 const shopify = shopifyApp({
   apiKey:         process.env.SHOPIFY_API_KEY || "",
   apiSecretKey:   process.env.SHOPIFY_API_SECRET || "",
   apiVersion:     ApiVersion.July26,
   scopes:         process.env.SCOPES?.split(","),
-  appUrl:         process.env.SHOPIFY_APP_URL || "",
+  appUrl,
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution:   AppDistribution.AppStore,

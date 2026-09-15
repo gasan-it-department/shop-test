@@ -2,7 +2,7 @@ import { Form, useLoaderData } from "react-router"
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router"
 
 import { FREE_POST_LIMIT, PRO_PLAN } from "../lib/plans"
-import { authenticate } from "../shopify.server"
+import { appUrl, authenticate } from "../shopify.server"
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { billing } = await authenticate.admin(request)
@@ -28,7 +28,8 @@ export async function action({ request }: ActionFunctionArgs) {
   await billing.request({
     plan: PRO_PLAN,
     isTest: process.env.NODE_ENV !== "production",
-    returnUrl: `${process.env.SHOPIFY_APP_URL}/app/billing`,
+    // normalised, so no doubled slash if the env var had a trailing one
+    returnUrl: `${appUrl}/app/billing`,
   })
 
   return null
