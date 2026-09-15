@@ -70,15 +70,22 @@ const shopify = shopifyApp({
   },
 
   hooks: {
-    // also registering webhooks here, not just in the toml, covers shops that
-    // installed before a topic was added
+    // no registerWebhooks() here. the subscriptions are declared in
+    // shopify.app.toml and pushed by `shopify app deploy` — that's the
+    // declarative path, and calling the api registration on top of it has no
+    // webhook config in code to work from, throws, and 500s the install.
     afterAuth: async ({ session }) => {
-      await shopify.registerWebhooks({ session })
-      await prisma.shop.upsert({
-        where:  { domain: session.shop },
-        update: { installed: true },
-        create: { domain: session.shop },
-      })
+      try {
+        await prisma.shop.upsert({
+          where:  { domain: session.shop },
+          update: { installed: true },
+          create: { domain: session.shop },
+        })
+      } catch (error) {
+        // bookkeeping, not the critical path. failing the whole install over
+        // it leaves the merchant staring at a 500 with the app half-connected.
+        console.error("[afterAuth] shop upsert failed:", error)
+      }
     },
   },
 
