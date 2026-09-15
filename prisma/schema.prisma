@@ -1,0 +1,195 @@
+// postgres. was sqlite until the migration in docs/sqlite-to-postgres.md —
+// kept free of sqlite-only types, autoincrement PKs and implicit ordering
+// assumptions the whole time, which is why the swap was a datasource change
+// plus a fresh baseline migration.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- session storage --------------------------------------------------------
+// shape is dictated by @shopify/shopify-app-session-storage-prisma, it maps
+// onto these by name. don't rename.
+
+model Session {
+  id            String    @id
+  shop          String
+  state         String
+  isOnline      Boolean   @default(false)
+  scope         String?
+  expires       DateTime?
+  accessToken   String
+  userId        BigInt?
+  firstName     String?
+  lastName      String?
+  email         String?
+  accountOwner  Boolean   @default(false)
+  locale        String?
+  collaborator  Boolean?  @default(false)
+  emailVerified Boolean?  @default(false)
+
+  @@index([shop])
+}
+
+// --- forum ------------------------------------------------------------------
+
+model Shop {
+  id        String   @id @default(cuid())
+  domain    String   @unique
+  // timestamps are all stored UTC, this is only for rendering on the
+  // merchant's storefront. never hard-code a zone here.
+  timezone  String   @default("UTC")
+  locale    String   @default("en")
+  installed Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members    Member[]
+  categories Category[]
+  posts      Post[]
+  comments   Comment[]
+  instagram  InstagramAccount?
+
+  @@index([installed])
+}
+
+/// no ip, no password. auth is delegated to the storefront customer account
+/// and the shopper is keyed by a per-shop hmac of the shopify customer id.
+model Member {
+  id           String    @id @default(cuid())
+  shopId       String
+  /// hmac(shop domain + customer id), not reversible
+  shopperHash  String
+  displayName  String
+  avatarUrl    String?
+  /// set by the member or the redact webhook
+  anonymisedAt DateTime?
+  createdAt    DateTime  @default(now())
+
+  shop     Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  posts    Post[]
+  comments Comment[]
+
+  @@unique([shopId, shopperHash])
+  @@index([shopId, anonymisedAt])
+}
+
+model Category {
+  id        String  @id @default(cuid())
+  shopId    String
+  handle    String
+  title     String
+  /// only served to members the merchant has tagged
+  isPrivate Boolean @default(false)
+  position  Int     @default(0)
+
+  shop  Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  posts Post[]
+
+  @@unique([shopId, handle])
+  @@index([shopId, position])
+}
+
+model Post {
+  id         String    @id @default(cuid())
+  shopId     String
+  categoryId String
+  authorId   String?
+  title      String
+  /// raw author input, never interpolated into html without escapeHtml()
+  body       String
+  source     String    @default("forum") // "forum" | "instagram"
+  externalId String? // instagram media id when source = "instagram"
+  publishedAt DateTime @default(now())
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  shop      Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  category  Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  author    Member?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+  comments  Comment[]
+  reactions Reaction[]
+
+  @@unique([shopId, source, externalId])
+  @@index([shopId, publishedAt])
+  @@index([categoryId, publishedAt])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  shopId    String
+  postId    String
+  parentId  String?
+  authorId  String?
+  body      String
+  createdAt DateTime @default(now())
+
+  shop     Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  post     Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent   Comment?  @relation("CommentThread", fields: [parentId], references: [id], onDelete: Cascade)
+  children Comment[] @relation("CommentThread")
+  author   Member?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([postId, createdAt])
+  @@index([parentId])
+}
+
+model Reaction {
+  id        String   @id @default(cuid())
+  postId    String
+  memberId  String
+  emoji     String
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, memberId, emoji])
+}
+
+// --- instagram import -------------------------------------------------------
+
+model InstagramAccount {
+  id             String    @id @default(cuid())
+  shopId         String    @unique
+  igUserId       String
+  username       String
+  /// TODO: encrypt at rest before this goes anywhere near production
+  accessToken    String
+  tokenExpiresAt DateTime
+  /// cursor into the media edge so a resumed import doesn't re-walk history
+  lastCursor     String?
+  lastSyncedAt   DateTime?
+  disabledReason String?
+
+  shop Shop        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  jobs ImportJob[]
+
+  @@index([tokenExpiresAt])
+}
+
+/// claimed with a conditional update so two workers can't take the same job.
+/// on postgres this needs FOR UPDATE SKIP LOCKED — see the migration doc.
+model ImportJob {
+  id          String    @id @default(cuid())
+  accountId   String
+  kind        String // "media" | "comments" | "reels"
+  status      String    @default("pending") // pending | running | done | failed
+  attempts    Int       @default(0)
+  /// backoff target, worker only claims rows where runAfter <= now()
+  runAfter    DateTime  @default(now())
+  claimedAt   DateTime?
+  lastError   String?
+  payload     String    @default("{}")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  account InstagramAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([status, runAfter])
+  @@index([accountId, status])
+}

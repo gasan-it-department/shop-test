@@ -1,0 +1,6 @@
+api_version = "2026-07"
+
+[[extensions]]
+type = "theme"
+name = "Forum embed"
+handle = "forum-embed"

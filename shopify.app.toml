@@ -1,0 +1,67 @@
+# Deployed config (Railway). `shopify app deploy` pushes this to the Partner app.
+#
+# Two values need filling in before the first deploy:
+#   client_id       -> `shopify app config link` fetches it from the Partner app
+#   application_url -> `npm run app:url https://<your>.up.railway.app`
+#
+# That script also rewrites redirect_urls and the app proxy url, which have to
+# stay in sync with application_url. Editing one and forgetting the others is
+# the usual cause of an opaque "redirect_uri is not whitelisted" at install.
+#
+# automatically_update_urls_on_dev is false here on purpose: with it on,
+# running `shopify app dev` rewrites application_url to the tunnel and the next
+# deploy silently points the live app at a dead tunnel. Local dev uses
+# shopify.app.local.toml instead.
+
+name = "shopify-practice"
+handle = "shopify-practice"
+client_id = "REPLACE_VIA_SHOPIFY_APP_CONFIG_LINK"
+application_url = "https://REPLACE.up.railway.app"
+embedded = true
+
+[access_scopes]
+# keep minimal, every extra scope is a line on the install screen and a
+# question at app review
+scopes = "read_products,read_customers,write_customers"
+use_legacy_install_flow = false
+
+[auth]
+# authPathPrefix is "/auth" in app/shopify.server.ts and the library builds its
+# callback as `${authPathPrefix}/callback`. That one url is all that's needed —
+# /auth/shopify/callback and /api/auth/callback come from the old Remix
+# template and this app never serves them.
+redirect_urls = [
+  "https://REPLACE.up.railway.app/auth/callback"
+]
+
+[webhooks]
+api_version = "2026-07"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes-update"
+
+  # mandatory. submissions are rejected without these and they must answer
+  # 200 within 5s.
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "/webhooks/compliance"
+
+# storefront traffic without CORS and without exposing our own domain:
+#   https://<shop>/apps/forum/posts  ->  /proxy/posts, signed with the secret
+[app_proxy]
+url = "https://REPLACE.up.railway.app/proxy"
+subpath = "forum"
+prefix = "apps"
+
+[pos]
+embedded = false
+
+[build]
+# include_config_on_deploy is gone in current CLI versions — config is always
+# pushed on deploy now.
+automatically_update_urls_on_dev = false

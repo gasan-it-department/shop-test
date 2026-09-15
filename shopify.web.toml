@@ -1,0 +1,7 @@
+name = "shopify-practice"
+roles = ["backend", "frontend"]
+webhooks_path = "/webhooks"
+
+[commands]
+predev = "npx prisma generate && npx prisma migrate deploy"
+dev = "npx react-router dev"

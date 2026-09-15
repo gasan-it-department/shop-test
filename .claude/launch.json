@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "shopify-practice",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["react-router", "dev", "--port", "3000"],
+      "port": 3000
+    }
+  ]
+}

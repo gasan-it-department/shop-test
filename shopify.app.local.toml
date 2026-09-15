@@ -1,0 +1,51 @@
+# Local dev config. Use with:
+#   shopify app dev --config local
+#
+# Separate from shopify.app.toml so the CLI's tunnel url can't overwrite the
+# Railway url. automatically_update_urls_on_dev is true here, so every url
+# below is rewritten on each `shopify app dev` — they're placeholders and
+# stale values are expected.
+#
+# Point this at its own Partner app rather than the deployed one, otherwise a
+# dev session repoints the live app's urls at your laptop.
+
+name = "shopify-practice-dev"
+handle = "shopify-practice-dev"
+client_id = "REPLACE_VIA_SHOPIFY_APP_CONFIG_LINK"
+application_url = "https://placeholder.trycloudflare.com"
+embedded = true
+
+[access_scopes]
+scopes = "read_products,read_customers,write_customers"
+use_legacy_install_flow = false
+
+[auth]
+redirect_urls = [
+  "https://placeholder.trycloudflare.com/auth/callback"
+]
+
+[webhooks]
+api_version = "2026-07"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/uninstalled" ]
+  uri = "/webhooks/app/uninstalled"
+
+  [[webhooks.subscriptions]]
+  topics = [ "app/scopes_update" ]
+  uri = "/webhooks/app/scopes-update"
+
+  [[webhooks.subscriptions]]
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+  uri = "/webhooks/compliance"
+
+[app_proxy]
+url = "https://placeholder.trycloudflare.com/proxy"
+subpath = "forum"
+prefix = "apps"
+
+[pos]
+embedded = false
+
+[build]
+automatically_update_urls_on_dev = true
