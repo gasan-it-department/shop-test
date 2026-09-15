@@ -32,6 +32,11 @@ model Session {
   locale        String?
   collaborator  Boolean?  @default(false)
   emailVerified Boolean?  @default(false)
+  // written by the adapter whether or not expiringOfflineAccessTokens is on.
+  // leaving them out makes session.upsert() fail with "Unknown argument
+  // `refreshToken`" and every authenticated request 500s.
+  refreshToken        String?
+  refreshTokenExpires DateTime?
 
   @@index([shop])
 }
