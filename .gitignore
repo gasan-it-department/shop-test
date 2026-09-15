@@ -3,7 +3,7 @@ build
 .react-router
 .env
 .env.*
-!.env.example
+.env.example
 *.sqlite
 *.sqlite-journal
 prisma/dev.sqlite*
