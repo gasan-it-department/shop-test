@@ -18,8 +18,10 @@ export default [
     route("billing", "routes/app.billing.tsx"),
   ]),
 
-  route("auth/*", "routes/auth.$.tsx"),
+  // more specific than auth/* so it isn't swallowed by the shopify catch-all
+  route("auth/instagram/callback", "routes/auth.instagram.callback.tsx"),
   route("auth/login", "routes/auth.login.tsx"),
+  route("auth/*", "routes/auth.$.tsx"),
 
   // storefront, via the app proxy
   route("proxy/posts", "routes/proxy.posts.tsx"),

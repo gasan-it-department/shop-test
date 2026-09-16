@@ -19,7 +19,7 @@
     "prisma:studio": "prisma studio",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --exclude 'tests/db/**'",
-    "test:db": "vitest run tests/db",
+    "test:db": "vitest run tests/db --no-file-parallelism",
     "db:local": "node scripts/local-db.mjs",
     "test:watch": "vitest",
     "lint": "tsc --noEmit"
