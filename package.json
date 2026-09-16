@@ -11,10 +11,9 @@
     "app:url": "node scripts/set-app-url.mjs",
     "app:deploy": "shopify app deploy",
     "build": "prisma generate && react-router build",
-    "start": "prisma migrate deploy && node prisma/seed.mjs && react-router-serve ./build/server/index.js",
+    "start": "prisma migrate deploy && react-router-serve ./build/server/index.js",
     "setup": "prisma generate && prisma migrate deploy",
     "db:deploy": "prisma migrate deploy",
-    "seed": "node prisma/seed.mjs",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
@@ -33,7 +32,8 @@
     "isbot": "^5.2.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-router": "^7.18.3"
+    "react-router": "^7.18.3",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@react-router/dev": "^7.18.3",

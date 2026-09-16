@@ -4,7 +4,10 @@ import { boundary } from "@shopify/shopify-app-react-router/server"
 import { Link, Outlet, useLoaderData, useRouteError } from "react-router"
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router"
 
+import adminStyles from "../styles/admin.css?url"
 import { authenticate } from "../shopify.server"
+
+export const links = () => [{ rel: "stylesheet", href: adminStyles }]
 
 export async function loader({ request }: LoaderFunctionArgs) {
   await authenticate.admin(request)
@@ -14,15 +17,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export default function App() {
   const { apiKey } = useLoaderData<typeof loader>()
 
-  // no isEmbeddedApp prop in v2, and this pulls in Polaris web components
-  // rather than the deprecated Polaris React package
   return (
     <AppProvider apiKey={apiKey}>
       {/* renders into the admin's left nav, outside the iframe */}
       <NavMenu>
         <Link to="/app" rel="home">
-          Forum
+          Overview
         </Link>
+        <Link to="/app/posts">Posts</Link>
+        <Link to="/app/categories">Categories</Link>
+        <Link to="/app/members">Members</Link>
         <Link to="/app/instagram">Instagram</Link>
         <Link to="/app/billing">Plan</Link>
       </NavMenu>

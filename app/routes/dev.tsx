@@ -138,9 +138,10 @@ export default function Dev() {
                 </div>
               ) : (
                 <div className="empty">
-                  <p>No posts yet.</p>
+                  <p>No public posts yet.</p>
                   <p className="muted">
-                    Run <code>npm run seed</code> and reload.
+                    Create a category and a post in the admin, or from the
+                    storefront, then reload.
                   </p>
                 </div>
               )}
@@ -156,7 +157,7 @@ export default function Dev() {
 
           <div className="panel">
             <div className="panel__head">
-              <span className="panel__title">Seeded data</span>
+              <span className="panel__title">Forum data</span>
             </div>
             <div className="panel__body">
               {counts ? (
@@ -187,7 +188,7 @@ export default function Dev() {
                 </>
               ) : (
                 <p className="muted">
-                  Database is empty. Run <code>npm run seed</code>.
+                  No shop row yet — install the app on a store first.
                 </p>
               )}
             </div>

@@ -55,18 +55,13 @@ Attach a custom domain if this is going to live more than a few days — the
 generated subdomain changes if the service is recreated, and every Shopify
 redirect URL breaks with a mismatch error that doesn't explain itself.
 
-## 5. Seed
-
-```bash
-railway run npm run seed
-```
-
-Runs against the Railway database with its env vars. Now `/dev` has posts.
-
-## 6. Check it
+## 5. Check it
 
 - `https://<domain>/sante` → `{"status":"ok",...}`
-- `https://<domain>/dev` → the widget, the hostile-theme toggle, the counts
+- `https://<domain>/dev` → the widget and the hostile-theme toggle
+
+There is no seed data. The forum is empty until you create a category and a
+post from the admin, which is the point — nothing in this app is fabricated.
 
 ---
 
@@ -156,11 +151,13 @@ There's no SQLite fallback any more, so local needs a Postgres:
 docker compose up -d
 ```
 
-Without Docker, paste the Railway database's **public** URL (Variables tab,
-`DATABASE_PUBLIC_URL`) into the local `.env` — it works over the internet.
+Without Docker, paste the Railway database's **public** URL into the local
+`.env`. It lives on the **Postgres** service's Variables tab as
+`DATABASE_PUBLIC_URL`, and only exists once a TCP proxy is enabled on that
+service.
 
 Then:
 
 ```bash
-npx prisma migrate deploy && npm run seed && npm run dev:local
+npx prisma migrate deploy && npm run dev:local
 ```

@@ -1,0 +1,465 @@
+/* admin ui. plain html rather than polaris web components — the component
+   attribute surface moves and a wrong prop renders nothing, which is not a
+   thing to discover inside an iframe. 14px base, no shadows, tinted fills,
+   weight carrying hierarchy instead of colour. */
+
+:root {
+  --bg: #f7f7f7;
+  --surface: #ffffff;
+  --border: #e3e3e3;
+  --border-strong: #d0d0d0;
+  --text: #1a1a1a;
+  --text-muted: #616161;
+  --text-subtle: #8a8a8a;
+  --accent: #1a1a1a;
+  --fill-info: #eef2f7;
+  --fill-info-text: #30456b;
+  --fill-success: #eaf4ee;
+  --fill-success-text: #0f6b3f;
+  --fill-warning: #fdf4e3;
+  --fill-warning-text: #7a5200;
+  --fill-critical: #fceded;
+  --fill-critical-text: #a32020;
+  --radius: 8px;
+  --radius-sm: 6px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 400 14px/1.55 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.page {
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px 20px 72px;
+}
+
+.page__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.page__title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+.page__subtitle {
+  color: var(--text-muted);
+  margin: 4px 0 0;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.card + .card {
+  margin-top: 16px;
+}
+
+.card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.card__title {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.card__body {
+  padding: 16px;
+}
+
+.card__body--flush {
+  padding: 0;
+}
+
+/* --- stats ------------------------------------------------------------- */
+
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 32px;
+  margin: 0;
+  padding: 0;
+}
+
+.stat__value {
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.stat__label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* --- tables ------------------------------------------------------------ */
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f0f0f0;
+  vertical-align: top;
+}
+
+tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+td.actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.cell-title {
+  font-weight: 500;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.cell-title:hover {
+  text-decoration: underline;
+}
+
+.cell-muted {
+  color: var(--text-muted);
+}
+
+/* --- forms ------------------------------------------------------------- */
+
+.field {
+  margin-bottom: 16px;
+}
+
+.field:last-child {
+  margin-bottom: 0;
+}
+
+.field__label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.field__hint {
+  font-size: 12px;
+  color: var(--text-subtle);
+  margin-top: 6px;
+}
+
+.field__error {
+  font-size: 12px;
+  color: var(--fill-critical-text);
+  margin-top: 6px;
+}
+
+input[type="text"],
+input[type="number"],
+textarea,
+select {
+  width: 100%;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--text);
+}
+
+input[aria-invalid="true"],
+textarea[aria-invalid="true"] {
+  border-color: var(--fill-critical-text);
+}
+
+textarea {
+  min-height: 140px;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.checkbox input {
+  margin: 3px 0 0;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 640px) {
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+/* --- buttons ----------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:hover {
+  background: #fafafa;
+}
+
+.btn--primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.btn--primary:hover {
+  background: #000;
+}
+
+.btn--danger {
+  color: var(--fill-critical-text);
+  border-color: #e7c4c4;
+  background: var(--surface);
+}
+
+.btn--danger:hover {
+  background: var(--fill-critical);
+}
+
+.btn--sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
+.btn[disabled] {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.btn-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+/* --- badges ------------------------------------------------------------ */
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--fill-info);
+  color: var(--fill-info-text);
+  white-space: nowrap;
+}
+
+.badge--success {
+  background: var(--fill-success);
+  color: var(--fill-success-text);
+}
+
+.badge--warning {
+  background: var(--fill-warning);
+  color: var(--fill-warning-text);
+}
+
+.badge--critical {
+  background: var(--fill-critical);
+  color: var(--fill-critical-text);
+}
+
+.badge--neutral {
+  background: #f1f1f1;
+  color: var(--text-muted);
+}
+
+/* --- banners ----------------------------------------------------------- */
+
+.banner {
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  background: var(--fill-info);
+  color: var(--fill-info-text);
+}
+
+.banner--success {
+  background: var(--fill-success);
+  color: var(--fill-success-text);
+}
+
+.banner--warning {
+  background: var(--fill-warning);
+  color: var(--fill-warning-text);
+}
+
+.banner--critical {
+  background: var(--fill-critical);
+  color: var(--fill-critical-text);
+}
+
+.banner__title {
+  font-weight: 600;
+  margin: 0 0 2px;
+}
+
+.banner p {
+  margin: 0;
+}
+
+/* --- empty state ------------------------------------------------------- */
+
+.empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.empty__title {
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 4px;
+}
+
+.empty p {
+  margin: 0 0 16px;
+}
+
+/* --- misc -------------------------------------------------------------- */
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.inline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.prose {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.65;
+}
+
+code {
+  font: 12px/1.4 ui-monospace, "Cascadia Code", Consolas, monospace;
+  background: #f2f2f2;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+.comment {
+  padding: 12px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.comment:last-child {
+  border-bottom: 0;
+}
+
+.comment__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.comment--reply {
+  margin-left: 24px;
+  padding-left: 12px;
+  border-left: 2px solid var(--border);
+}

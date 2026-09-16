@@ -8,8 +8,14 @@ export default [
 
   route("app", "routes/app.tsx", [
     index("routes/app._index.tsx"),
-    route("billing", "routes/app.billing.tsx"),
+    route("posts", "routes/app.posts.tsx"),
+    route("posts/new", "routes/app.posts.new.tsx"),
+    route("posts/:id", "routes/app.posts.$id.tsx"),
+    route("categories", "routes/app.categories.tsx"),
+    route("categories/:id", "routes/app.categories.$id.tsx"),
+    route("members", "routes/app.members.tsx"),
     route("instagram", "routes/app.instagram.tsx"),
+    route("billing", "routes/app.billing.tsx"),
   ]),
 
   route("auth/*", "routes/auth.$.tsx"),
@@ -17,6 +23,7 @@ export default [
 
   // storefront, via the app proxy
   route("proxy/posts", "routes/proxy.posts.tsx"),
+  route("proxy/posts/:id", "routes/proxy.posts.$id.tsx"),
 
   route("webhooks/app/uninstalled", "routes/webhooks.app.uninstalled.tsx"),
   route("webhooks/app/scopes-update", "routes/webhooks.app.scopes-update.tsx"),

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 
-import { renderPostList, type RenderablePost } from "../app/lib/render-posts"
+import {
+  renderPostDetail,
+  renderPostList,
+  type RenderablePost,
+  type RenderablePostDetail,
+} from "../app/lib/render-posts"
 
 function post(overrides: Partial<RenderablePost> = {}): RenderablePost {
   return {
@@ -52,5 +57,78 @@ describe("renderPostList", () => {
 
   it("keeps the post id in the link", () => {
     expect(renderPostList([post({ id: "abc123" })], "s")).toContain("/apps/forum/posts/abc123")
+  })
+})
+
+function detail(overrides: Partial<RenderablePostDetail> = {}): RenderablePostDetail {
+  return {
+    id: "post_1",
+    title: "Which grind for a V60?",
+    body: "Going finer than table salt tastes bitter.",
+    authorName: "Ana",
+    categoryTitle: "Brewing",
+    publishedAt: "2026-02-01",
+    comments: [],
+    ...overrides,
+  }
+}
+
+describe("renderPostDetail", () => {
+  it("renders the post body", () => {
+    expect(renderPostDetail(detail(), false)).toContain("tastes bitter")
+  })
+
+  it("escapes a hostile body", () => {
+    const markup = renderPostDetail(
+      detail({ body: `<img src=x onerror=alert(1)>` }),
+      false,
+    )
+    expect(markup).not.toContain("<img src=x")
+    expect(markup).toContain("&lt;img")
+  })
+
+  it("escapes a hostile comment body", () => {
+    const markup = renderPostDetail(
+      detail({
+        comments: [
+          {
+            id: "c1",
+            body: `</p><script>alert(1)</script>`,
+            authorName: "Bruno",
+            createdAt: "2026-02-02",
+          },
+        ],
+      }),
+      false,
+    )
+    expect(markup).not.toContain("<script>")
+  })
+
+  it("shows the comment form only to a signed-in shopper", () => {
+    expect(renderPostDetail(detail(), true)).toContain("<form")
+    expect(renderPostDetail(detail(), false)).not.toContain("<form")
+  })
+
+  it("prompts an anonymous visitor to sign in", () => {
+    expect(renderPostDetail(detail(), false)).toContain("Sign in")
+  })
+
+  it("posts the comment form back to the same proxy path", () => {
+    expect(renderPostDetail(detail({ id: "xyz" }), true)).toContain(
+      'action="/apps/forum/posts/xyz"',
+    )
+  })
+
+  it("renders every comment", () => {
+    const markup = renderPostDetail(
+      detail({
+        comments: [
+          { id: "c1", body: "one", authorName: "A", createdAt: "2026-02-02" },
+          { id: "c2", body: "two", authorName: "B", createdAt: "2026-02-03" },
+        ],
+      }),
+      false,
+    )
+    expect(markup.match(/class="ic-comment"/g)).toHaveLength(2)
   })
 })

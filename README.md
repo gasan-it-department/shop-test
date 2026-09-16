@@ -26,38 +26,56 @@ Node 22.17 / npm 11.6, Windows 11.
 
 | | Shopify account? | |
 |---|---|---|
-| `npx vitest run` | no | 94 passed (5 files) |
+| `npx vitest run` | no | 149 passed (7 files) |
 | `npx tsc --noEmit` | no | clean |
 | `npx react-router build` | no | client + SSR bundles |
-| `npx prisma migrate deploy` + `npm run seed` | no | Postgres schema + demo data |
+| `npx prisma migrate deploy` | no | Postgres schema |
 | **`/dev`** | no | renders the real storefront widget |
 | `/dev/posts` | no | unsigned twin of the proxy fragment |
 | `/sante` | no | `{"status":"ok","latencyMs":2}`, a real query |
 | `/` | no | landing stub |
-| `/app`, `/app/billing`, `/app/instagram` | **yes** | redirect to OAuth and stop |
+| `/app/*` | **yes** | the admin; redirects to OAuth without a session |
 | `/proxy/posts` | **yes** | rejects unsigned requests by design |
 | Theme extension in a real storefront | **yes** | needs a dev store |
-| Instagram import | Meta app too | not wired to a live account |
+| Instagram import | Meta app too | needs `META_APP_ID` / `META_APP_SECRET` |
+
+**There is no seed or demo data.** The forum starts empty and fills up from the
+admin and the storefront.
 
 Everything that's logic runs here today. Everything that's platform needs a
 free Partner account — no card, no business details.
 
+## What the admin does
+
+Full CRUD, all of it against real rows — nothing is stubbed.
+
+| Screen | |
+|---|---|
+| **Overview** | counts, recent posts, shop timezone read from the Admin API |
+| **Posts** | list with search and category filter, pagination, delete |
+| **Posts › New / Edit** | create, edit, delete; moderate and reply to comments |
+| **Categories** | create, edit, delete, reorder, public/private |
+| **Members** | list, and anonymise through the same code path as `customers/redact` |
+| **Instagram** | connection state, token expiry, import queue, disconnect |
+| **Plan** | Billing API status and upgrade |
+
+Storefront, through the signed App Proxy: list posts, read a post with its
+comments, create a post, add a comment. Private categories are filtered out at
+the query, so a guessed post id can't reach one.
+
+Every query is scoped by `shopId` in [app/lib/forum.server.ts](app/lib/forum.server.ts)
+— writes use `updateMany`/`deleteMany` with a `{ id, shopId }` filter rather
+than `update({ where: { id } })`, which would ignore the tenant.
+
 ### `/dev`
 
-`/` is a stub and `/app` is behind OAuth, so without this there's nothing to
-look at. `/dev`:
+A local harness that mounts the real
+`extensions/forum-embed/assets/forum.js` — read from disk, not copied —
+against the real rendered fragment, with a **"Simulate a hostile theme"**
+toggle that injects the CSS a bad theme ships. The widget shouldn't move; if
+it does, the shadow root isn't working.
 
-- mounts the real `extensions/forum-embed/assets/forum.js`, read from disk not
-  copied, against the real rendered fragment;
-- seeds hostile content — a post titled `</h3><img src=x onerror=alert(1)>`,
-  a member called `<script>alert("xss")</script>` — which has to show as text;
-- has a **"Simulate a hostile theme"** toggle that injects the CSS a bad theme
-  ships (`* { font-family: Comic Sans !important }`, `p { display: none }`).
-  The widget shouldn't move. If it does, the shadow root isn't working;
-- hides the seeded private category, so the public/total gap is visible.
-
-Both `/dev` routes 404 in production unless `ENABLE_DEV_HARNESS=1`, which is
-how the deployed demo shows the widget without the viewer needing a store.
+Both `/dev` routes 404 in production unless `ENABLE_DEV_HARNESS=1`.
 
 ## Running it
 
@@ -93,7 +111,7 @@ Without Docker, paste the Railway database's public URL (`DATABASE_PUBLIC_URL`)
 into `.env` instead. Then, no Shopify account needed:
 
 ```bash
-npx prisma migrate deploy && npm run seed && npm run dev:local
+npx prisma migrate deploy && npm run dev:local
 ```
 
 Open <http://localhost:5182/dev>.

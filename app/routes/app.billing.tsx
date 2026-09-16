@@ -1,18 +1,17 @@
-import { Form, useLoaderData } from "react-router"
+import { Form, useLoaderData, useNavigation } from "react-router"
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router"
 
+import { Badge, Banner, Card, PageHeader } from "../components/ui"
 import { FREE_POST_LIMIT, PRO_PLAN } from "../lib/plans"
 import { appUrl, authenticate } from "../shopify.server"
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { billing } = await authenticate.admin(request)
 
-  // check() only inspects. require() is the one that redirects to the charge
-  // page.
-  //
-  // wrapped because the admin client throws on a non-2xx — a 403 here would
-  // otherwise 500 the page, and "we couldn't read your plan" is a far better
-  // outcome than a dead screen.
+  // check() only inspects; require() is the one that redirects to the charge
+  // page. wrapped because the admin client throws on a non-2xx — a 403 here
+  // would otherwise take down the page, and "we couldn't read your plan" is a
+  // far better outcome than a dead screen.
   try {
     const { hasActivePayment, appSubscriptions } = await billing.check({
       plans: [PRO_PLAN],
@@ -34,11 +33,10 @@ export async function action({ request }: ActionFunctionArgs) {
   const { billing } = await authenticate.admin(request)
 
   // throws a redirect to shopify's confirmation page. the merchant approves
-  // there, never in our own UI — app review checks for this.
+  // there, never in our own ui — app review checks for this.
   await billing.request({
     plan: PRO_PLAN,
     isTest: process.env.NODE_ENV !== "production",
-    // normalised, so no doubled slash if the env var had a trailing one
     returnUrl: `${appUrl}/app/billing`,
   })
 
@@ -47,43 +45,52 @@ export async function action({ request }: ActionFunctionArgs) {
 
 export default function Billing() {
   const { hasActivePayment, subscriptionName, billingApiOk } = useLoaderData<typeof loader>()
-
-  if (!billingApiOk) {
-    return (
-      <s-page heading="Plan">
-        <s-section>
-          <s-banner tone="warning" heading="Plan status unavailable">
-            <s-paragraph>
-              The Billing API could not be reached. This usually means the app
-              is not yet approved for the scopes it requests.
-            </s-paragraph>
-          </s-banner>
-        </s-section>
-      </s-page>
-    )
-  }
+  const navigation = useNavigation()
+  const busy = navigation.state !== "idle"
 
   return (
-    <s-page heading="Plan">
-      <s-section>
+    <div className="page">
+      <PageHeader title="Plan" subtitle="Billing is handled by Shopify, not by this app." />
+
+      {!billingApiOk ? (
+        <Banner tone="warning" title="Plan status unavailable">
+          The Billing API could not be reached. This usually means the app is not approved for the
+          scopes it requests.
+        </Banner>
+      ) : null}
+
+      <Card title="Current plan">
         {hasActivePayment ? (
-          <s-stack direction="inline" gap="small">
-            <s-text>Active subscription</s-text>
-            <s-badge tone="success">{subscriptionName ?? PRO_PLAN}</s-badge>
-          </s-stack>
+          <div className="inline">
+            <Badge tone="success">Active</Badge>
+            <span>{subscriptionName ?? PRO_PLAN}</span>
+          </div>
         ) : (
-          <s-stack direction="block" gap="base">
-            <s-paragraph>
-              {`The forum is on the free tier, capped at ${FREE_POST_LIMIT} posts. Pro removes the cap.`}
-            </s-paragraph>
+          <>
+            <div className="inline" style={{ marginBottom: 12 }}>
+              <Badge tone="neutral">Free</Badge>
+              <span className="cell-muted">Capped at {FREE_POST_LIMIT} posts</span>
+            </div>
+            <p style={{ marginTop: 0 }}>
+              Pro removes the post cap. Approving the charge happens on Shopify&rsquo;s own
+              confirmation page.
+            </p>
             <Form method="post">
-              <s-button type="submit" variant="primary">
-                Upgrade to Pro — $9.99/month
-              </s-button>
+              <button type="submit" className="btn btn--primary" disabled={busy || !billingApiOk}>
+                {busy ? "Redirecting…" : "Upgrade to Pro — $9.99/month"}
+              </button>
             </Form>
-          </s-stack>
+          </>
         )}
-      </s-section>
-    </s-page>
+      </Card>
+
+      <Card title="Test mode">
+        <p className="cell-muted" style={{ marginTop: 0 }}>
+          Charges are created with <code>isTest</code> set from <code>NODE_ENV</code>, so nothing
+          on a development store is ever really billed. On a production deploy this flips
+          automatically.
+        </p>
+      </Card>
+    </div>
   )
 }
