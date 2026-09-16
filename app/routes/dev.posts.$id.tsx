@@ -9,6 +9,7 @@ import type { LoaderFunctionArgs } from "react-router"
 
 import prisma from "../db.server"
 import { assertDevHarness } from "../lib/dev-mode.server"
+import { imageSrc } from "../lib/forum.server"
 import { renderPostDetail } from "../lib/render-posts"
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
@@ -20,6 +21,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     include: {
       category: true,
       author: true,
+      images: { orderBy: { position: "asc" } },
       comments: { orderBy: { createdAt: "asc" }, include: { author: true } },
     },
   })
@@ -34,6 +36,15 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
       authorName: post.author?.displayName ?? null,
       categoryTitle: post.category.title,
       publishedAt: post.publishedAt.toISOString().slice(0, 10),
+      // relative: the harness serves from this app's own origin
+      images: post.images.map((image) => ({
+        url: imageSrc(image),
+        width: image.width,
+        height: image.height,
+        alt: image.alt,
+        // only a shopify cdn url resizes from the query string
+        resizable: Boolean(image.url),
+      })),
       comments: post.comments.map((comment) => ({
         id: comment.id,
         body: comment.body,

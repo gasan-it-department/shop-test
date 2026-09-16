@@ -275,7 +275,7 @@ describe("instagram images", () => {
     await syncAccount(account.id, {
       fetchImpl: fakeNetwork([{ data: [media("m1")], last: true }]) as never,
     })
-    const image = await prisma.postImage.findFirstOrThrow()
+    const image = await prisma.postImage.findFirstOrThrow({ where: { post: { shop: { domain: SHOP } } } })
     expect(image.contentType).toBe("image/jpeg")
   })
   it("does not re-upload on a second sync of the same media", async () => {
@@ -288,7 +288,7 @@ describe("instagram images", () => {
     })
 
     expect(second.images).toBe(0)
-    expect(await prisma.postImage.count()).toBe(1)
+    expect(await prisma.postImage.count({ where: { post: { shop: { domain: SHOP } } } })).toBe(1)
   })
 
   it("keeps importing when one picture cannot be fetched", async () => {

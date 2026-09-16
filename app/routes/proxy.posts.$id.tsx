@@ -51,6 +51,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
         width: image.width,
         height: image.height,
         alt: image.alt,
+        // only a shopify cdn url resizes from the query string
+        resizable: Boolean(image.url),
       })),
       comments: post.comments.map((comment) => ({
         id: comment.id,

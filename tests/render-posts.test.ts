@@ -58,6 +58,36 @@ describe("renderPostList", () => {
   it("keeps the post id in the link", () => {
     expect(renderPostList([post({ id: "abc123" })], "s")).toContain("/apps/forum/posts/abc123")
   })
+
+  it("shows a thumbnail when the post has an image", () => {
+    const markup = renderPostList(
+      [post({ imageUrl: "https://app.example/images/img1" })],
+      "shop.myshopify.com",
+    )
+    expect(markup).toContain("ic-post__thumb")
+    expect(markup).toContain("https://app.example/images/img1")
+    // the chevron is replaced, not doubled up
+    expect(markup).not.toContain("ic-post__chevron")
+  })
+
+  it("falls back to the chevron when there is no image", () => {
+    const markup = renderPostList([post()], "shop.myshopify.com")
+    expect(markup).toContain("ic-post__chevron")
+    expect(markup).not.toContain("ic-post__thumb")
+  })
+
+  it("renders no thumbnail for an unsafe image url", () => {
+    const markup = renderPostList([post({ imageUrl: "javascript:alert(1)" })], "s")
+    expect(markup).not.toContain("ic-post__thumb")
+  })
+
+  it("keeps escaping the title when a thumbnail is present", () => {
+    const markup = renderPostList(
+      [post({ title: `<script>alert(1)</script>`, imageUrl: "https://app.example/i" })],
+      "s",
+    )
+    expect(markup).not.toContain("<script>")
+  })
 })
 
 function detail(overrides: Partial<RenderablePostDetail> = {}): RenderablePostDetail {
@@ -143,11 +173,17 @@ describe("renderPostDetail", () => {
     expect(renderPostDetail(detail(), true, "boom")).toContain(`class="ic-error"`)
   })
 
-  it("renders attached images with a responsive srcset", () => {
+  it("renders a resizable cdn image with a responsive srcset", () => {
     const markup = renderPostDetail(
       detail({
         images: [
-          { url: "https://cdn.shopify.com/a.jpg", width: 1200, height: 800, alt: "A cup" },
+          {
+            url: "https://cdn.shopify.com/a.jpg",
+            width: 1200,
+            height: 800,
+            alt: "A cup",
+            resizable: true,
+          },
         ],
       }),
       false,
@@ -156,14 +192,51 @@ describe("renderPostDetail", () => {
     expect(markup).toContain("width=600")
     expect(markup).toContain('alt="A cup"')
     expect(markup).toContain('loading="lazy"')
+    expect(markup).toContain('width="1200" height="800"')
   })
 
   it("appends the resize param correctly when the url already has a query", () => {
     const markup = renderPostDetail(
-      detail({ images: [{ url: "https://cdn.shopify.com/a.jpg?v=2", width: null, height: null, alt: null }] }),
+      detail({
+        images: [
+          {
+            url: "https://cdn.shopify.com/a.jpg?v=2",
+            width: null,
+            height: null,
+            alt: null,
+            resizable: true,
+          },
+        ],
+      }),
       false,
     )
     expect(markup).toContain("v=2&amp;width=1200")
+  })
+
+  it("emits no srcset for an image this app serves itself", () => {
+    // /images/:id has no resizer, so three urls returning identical bytes
+    // would just make the browser choose between them for nothing
+    const markup = renderPostDetail(
+      detail({
+        images: [{ url: "https://app.example/images/abc", width: null, height: null, alt: null }],
+      }),
+      false,
+    )
+    expect(markup).not.toContain("srcset=")
+    expect(markup).not.toContain("?width=")
+    expect(markup).toContain('src="https://app.example/images/abc"')
+  })
+
+  it("claims no dimensions it does not know", () => {
+    // a guessed width/height reserves the wrong shape and the page jumps
+    const markup = renderPostDetail(
+      detail({
+        images: [{ url: "https://app.example/images/abc", width: null, height: null, alt: null }],
+      }),
+      false,
+    )
+    expect(markup).not.toContain('width="1200"')
+    expect(markup).not.toContain('height="800"')
   })
 
   it("escapes a hostile alt attribute", () => {

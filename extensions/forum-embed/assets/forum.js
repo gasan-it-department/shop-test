@@ -98,6 +98,13 @@
     "                    transition: opacity .14s ease, transform .14s ease; }",
     ".ic-post__link:hover .ic-post__chevron { opacity: .7; transform: none; }",
 
+    // thumbnail sits where the chevron would, so illustrated and plain rows
+    // keep the same height and the list still scans as one column
+    ".ic-post__thumb { flex: 0 0 auto; width: 64px; height: 64px; border-radius: 10px;",
+    "                  object-fit: cover; background: var(--ic-faint);",
+    "                  transition: opacity .14s ease; }",
+    ".ic-post__link:hover .ic-post__thumb { opacity: .88; }",
+
     // --- states ---
     ".state { border: 1px solid var(--ic-faint); border-radius: var(--ic-radius);",
     "         padding: 40px 20px; text-align: center; color: var(--ic-muted); font-size: 14px; }",
@@ -123,6 +130,7 @@
     "  .ic-avatar { width: 34px; height: 34px; font-size: 12px; }",
     "  .ic-post__title { white-space: normal; }",
     "  .ic-post__chevron { display: none; }",
+    "  .ic-post__thumb { width: 52px; height: 52px; border-radius: 8px; }",
     "}",
   ].join("\n")
 

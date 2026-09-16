@@ -9,6 +9,8 @@ export interface RenderablePost {
   authorName: string | null
   categoryTitle: string
   commentCount: number
+  /** first attached image, absolute — this markup renders on the shop's domain */
+  imageUrl?: string | null
 }
 
 /** "Ana Reyes" -> "AR", "thatone" -> "TH". Never empty. */
@@ -40,24 +42,33 @@ export function renderPostList(posts: RenderablePost[], shop: string): string {
       const author = cleanDisplayName(post.authorName ?? "Member")
       const replies = post.commentCount === 1 ? "1 reply" : `${post.commentCount} replies`
 
-      return html`
-        <li class="ic-post">
-          <a class="ic-post__link" href="/apps/forum/posts/${post.id}">
-            <span class="ic-avatar" data-tint="${tintIndex(author)}" aria-hidden="true"
-              >${initials(author)}</span
-            >
-            <span class="ic-post__main">
-              <span class="ic-post__title">${post.title}</span>
-              <span class="ic-post__meta">
-                <span class="ic-chip">${post.categoryTitle}</span>
-                <span class="ic-post__author">${author}</span>
-                <span class="ic-post__replies">${replies}</span>
-              </span>
-            </span>
-            <span class="ic-post__chevron" aria-hidden="true">&rsaquo;</span>
-          </a>
-        </li>
+      // a thumbnail where there is one, the chevron where there isn't — the
+      // row keeps the same height either way, so a feed with some illustrated
+      // posts and some not still scans as one list
+      const thumbSrc = post.imageUrl ? attrUrl(post.imageUrl) : ""
+      const trailing = thumbSrc
+        ? `<img class="ic-post__thumb" src="${thumbSrc}" alt="" loading="lazy" decoding="async">`
+        : `<span class="ic-post__chevron" aria-hidden="true">&rsaquo;</span>`
+
+      // escaped content and raw markup kept apart: every value below goes
+      // through the tagged template, `trailing` is markup we built ourselves
+      const inner = html`
+        <span class="ic-avatar" data-tint="${tintIndex(author)}" aria-hidden="true"
+          >${initials(author)}</span
+        >
+        <span class="ic-post__main">
+          <span class="ic-post__title">${post.title}</span>
+          <span class="ic-post__meta">
+            <span class="ic-chip">${post.categoryTitle}</span>
+            <span class="ic-post__author">${author}</span>
+            <span class="ic-post__replies">${replies}</span>
+          </span>
+        </span>
       `
+
+      return `<li class="ic-post"><a class="ic-post__link" href="/apps/forum/posts/${escapeHtml(
+        post.id,
+      )}">${inner}${trailing}</a></li>`
     })
     .join("")
 
@@ -76,6 +87,14 @@ export interface RenderableImage {
   width: number | null
   height: number | null
   alt: string | null
+  /**
+   * true only for a cdn that resizes from the url (Shopify Files).
+   *
+   * Images served from this app's own /images route have no resizer, so a
+   * srcset there would make the browser choose between three urls that return
+   * identical bytes, and `?width=` would be noise in every request.
+   */
+  resizable?: boolean
 }
 
 export interface RenderablePostDetail {
@@ -254,17 +273,24 @@ export function renderPostDetail(
   // are set where known so the page doesn't reflow as images arrive.
   const images = (post.images ?? [])
     .map((image) => {
-      const src = attrUrl(cdnResize(image.url, 1200))
+      const src = attrUrl(image.resizable ? cdnResize(image.url, 1200) : image.url)
       // a url safeUrl rejects renders nothing rather than a broken image
       if (!src) return ""
 
-      const srcset = [600, 1200, 1800]
-        .map((w) => `${attrUrl(cdnResize(image.url, w))} ${w}w`)
-        .join(", ")
+      const srcset = image.resizable
+        ? ` srcset="${[600, 1200, 1800]
+            .map((w) => `${attrUrl(cdnResize(image.url, w))} ${w}w`)
+            .join(", ")}" sizes="(max-width: 48rem) 100vw, 48rem"`
+        : ""
+
+      // only claim dimensions we actually know — a guessed width/height
+      // reserves the wrong shape and the page jumps when the real image lands
+      const dims =
+        image.width && image.height ? ` width="${image.width}" height="${image.height}"` : ""
 
       // alt is merchant input and goes through the aggressive escape; the url
       // is ours and goes through the attribute-safe one
-      return `<figure class="ic-figure"><img class="ic-figure__img" src="${src}" srcset="${srcset}" sizes="(max-width: 48rem) 100vw, 48rem" alt="${escapeHtml(image.alt ?? "")}" loading="lazy" decoding="async" width="${image.width ?? 1200}" height="${image.height ?? 800}"></figure>`
+      return `<figure class="ic-figure"><img class="ic-figure__img" src="${src}"${srcset} alt="${escapeHtml(image.alt ?? "")}" loading="lazy" decoding="async"${dims}></figure>`
     })
     .join("")
 
@@ -297,8 +323,9 @@ export function renderPostDetail(
     `<style>${DETAIL_STYLES}</style>`,
     `<div class="ic-page">`,
     // back to wherever the widget is embedded. the merchant chooses that page,
-    // so the store root is the only link that is always correct.
-    `<a class="ic-back" href="/"><span aria-hidden="true">&larr;</span> Back to the store</a>`,
+    // so the store root is the only link that is always correct — but the
+    // label should name where it goes, which is the forum, not the shop.
+    `<a class="ic-back" href="/"><span aria-hidden="true">&larr;</span> Back to Community</a>`,
     article,
     heading,
     `<ul class="ic-comments">${comments}</ul>`,
