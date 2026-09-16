@@ -172,12 +172,13 @@ describe("syncAccount", () => {
 
   it("stops after maxPages so a long history can't hang the request", async () => {
     const account = await seedAccount()
-    const fetchImpl = fakeGraph([{ data: [media("m1")] }]) // never signals last
+    // fakeNetwork, not fakeGraph: the import also fetches picture bytes now,
+    // so a fake that only answers the graph api starves it
+    const fetchImpl = fakeNetwork([{ data: [media("m1")] }]) // never signals last
 
     const result = await syncAccount(account.id, { fetchImpl: fetchImpl as never, maxPages: 3 })
 
     expect(result.pages).toBe(3)
-    expect(fetchImpl).toHaveBeenCalledTimes(3)
     expect(result.cursor).not.toBeNull()
   })
 
@@ -251,11 +252,10 @@ describe("syncAccount", () => {
 })
 
 describe("instagram images", () => {
-  it("copies the picture into shopify files and attaches it to the post", async () => {
+  it("stores the picture and attaches it to the post", async () => {
     const account = await seedAccount()
     const result = await syncAccount(account.id, {
       fetchImpl: fakeNetwork([{ data: [media("m1")], last: true }]) as never,
-      graphql: fakeShopifyGraphql() as never,
     })
 
     expect(result.images).toBe(1)
@@ -265,31 +265,26 @@ describe("instagram images", () => {
       include: { images: true },
     })
     expect(post.images).toHaveLength(1)
-    // the stored url is shopify's, not instagram's â€” instagram urls expire
-    expect(post.images[0].url).toBe("https://cdn.shopify.com/ig.jpg")
-    expect(post.images[0].width).toBe(1080)
+    // bytes here, no url: instagram cdn links are signed and expire
+    expect(post.images[0].url).toBeNull()
+    expect(post.images[0].data).not.toBeNull()
   })
 
-  it("imports no pictures when no graphql client is supplied", async () => {
+  it("stores the content type so the image route can serve it", async () => {
     const account = await seedAccount()
-    const result = await syncAccount(account.id, {
+    await syncAccount(account.id, {
       fetchImpl: fakeNetwork([{ data: [media("m1")], last: true }]) as never,
     })
-
-    expect(result.images).toBe(0)
-    expect(await prisma.postImage.count()).toBe(0)
-    // the post itself still imports â€” no write_files should degrade, not fail
-    expect(await prisma.post.count({ where: { shop: { domain: SHOP } } })).toBe(1)
+    const image = await prisma.postImage.findFirstOrThrow()
+    expect(image.contentType).toBe("image/jpeg")
   })
-
   it("does not re-upload on a second sync of the same media", async () => {
     const account = await seedAccount()
     const opts = { fetchImpl: fakeNetwork([{ data: [media("m1")], last: true }]) as never }
 
-    await syncAccount(account.id, { ...opts, graphql: fakeShopifyGraphql() as never })
+    await syncAccount(account.id, opts)
     const second = await syncAccount(account.id, {
       fetchImpl: fakeNetwork([{ data: [media("m1")], last: true }]) as never,
-      graphql: fakeShopifyGraphql() as never,
     })
 
     expect(second.images).toBe(0)
@@ -307,7 +302,6 @@ describe("instagram images", () => {
 
     const result = await syncAccount(account.id, {
       fetchImpl: network as never,
-      graphql: fakeShopifyGraphql() as never,
     })
 
     expect(result.images).toBe(0)
@@ -342,7 +336,6 @@ describe("instagram images", () => {
 
     const result = await syncAccount(account.id, {
       fetchImpl: network as never,
-      graphql: fakeShopifyGraphql() as never,
     })
 
     expect(result.images).toBe(1)

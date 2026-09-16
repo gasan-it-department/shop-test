@@ -10,16 +10,12 @@ import {
   deletePost,
   deletePostImage,
   getPost,
+  imageSrc,
   listCategories,
   requireShop,
   updatePost,
 } from "../lib/forum.server"
-import {
-  describeAdminError,
-  ImageUploadError,
-  uploadImageToShopify,
-  validateImage,
-} from "../lib/shopify-files.server"
+import { validateImage } from "../lib/shopify-files.server"
 import { commentSchema, parseForm, postSchema, type FieldErrors } from "../lib/validation"
 import { authenticate } from "../shopify.server"
 
@@ -56,9 +52,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       updatedAt: post.updatedAt.toISOString(),
       images: post.images.map((image) => ({
         id: image.id,
-        // shopify serves resized variants straight off the url
-        thumb: `${image.url}${image.url.includes("?") ? "&" : "?"}width=200`,
-        url: image.url,
+        src: imageSrc(image),
         alt: image.alt,
       })),
       comments: post.comments.map((comment) => ({
@@ -90,24 +84,18 @@ export async function action({ request, params }: ActionFunctionArgs) {
     if (invalid) return data<ActionErrors>({ imageError: invalid }, { status: 422 })
 
     try {
-      const uploaded = await uploadImageToShopify(
-        admin.graphql,
-        file,
-        String(formData.get("alt") ?? "").trim() || file.name,
-      )
-      await addPostImage(shop.id, id, uploaded)
+      // straight into postgres. no admin api, so no scope, no app review state
+      // and nothing that can 403 this.
+      const bytes = new Uint8Array(await file.arrayBuffer())
+      await addPostImage(shop.id, id, {
+        data: bytes,
+        contentType: file.type,
+        alt: String(formData.get("alt") ?? "").trim() || null,
+      })
     } catch (error) {
-      // read the body — the admin client throws the Response, and the reason
-      // is inside it
-      const detail = await describeAdminError(error)
-      console.error("[images] upload failed:", detail, "| granted scopes:", session.scope)
-
-      const message =
-        error instanceof ImageUploadError
-          ? error.message
-          : `${detail}\n\nScopes on this token: ${session.scope ?? "(none)"}`
-
-      return data<ActionErrors>({ imageError: message.slice(0, 500) }, { status: 502 })
+      const detail = error instanceof Error ? error.message : String(error)
+      console.error("[images] upload failed:", detail)
+      return data<ActionErrors>({ imageError: detail.slice(0, 300) }, { status: 500 })
     }
 
     return redirect(`/app/posts/${id}`)
@@ -232,10 +220,10 @@ export default function PostDetail() {
 
           <div className="form-actions">
             <button type="submit" className="btn btn--primary" disabled={busy}>
-              {busy ? "Saving…" : "Save changes"}
+              {busy ? "SavingÃ¢â‚¬Â¦" : "Save changes"}
             </button>
             <span className="cell-muted">
-              Author: {post.author ?? "Merchant"} · {post.comments.length} comment
+              Author: {post.author ?? "Merchant"} Ã‚Â· {post.comments.length} comment
               {post.comments.length === 1 ? "" : "s"}
             </span>
           </div>
@@ -250,7 +238,7 @@ export default function PostDetail() {
             {post.images.map((image) => (
               <div key={image.id} style={{ width: 120 }}>
                 <img
-                  src={image.thumb}
+                  src={image.src}
                   alt={image.alt ?? ""}
                   width={120}
                   height={120}
@@ -296,7 +284,7 @@ export default function PostDetail() {
           </div>
           <div className="form-actions">
             <button type="submit" className="btn" disabled={busy}>
-              {busy ? "Uploading…" : "Upload image"}
+              {busy ? "UploadingÃ¢â‚¬Â¦" : "Upload image"}
             </button>
           </div>
         </Form>
@@ -338,7 +326,7 @@ export default function PostDetail() {
           </Field>
           <div className="form-actions">
             <button type="submit" className="btn btn--primary" disabled={busy}>
-              {busy ? "Posting…" : "Post comment"}
+              {busy ? "PostingÃ¢â‚¬Â¦" : "Post comment"}
             </button>
           </div>
         </Form>

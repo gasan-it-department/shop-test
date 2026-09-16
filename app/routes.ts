@@ -31,6 +31,9 @@ export default [
   route("webhooks/app/scopes-update", "routes/webhooks.app.scopes-update.tsx"),
   route("webhooks/compliance", "routes/webhooks.compliance.tsx"),
 
+  // public: post images stored in the database
+  route("images/:id", "routes/images.$id.tsx"),
+
   route("sante", "routes/sante.tsx"),
 
   // 404 in production unless ENABLE_DEV_HARNESS=1

@@ -54,7 +54,9 @@ const shopify = shopifyApp({
   appUrl,
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
-  distribution:   AppDistribution.AppStore,
+  // SingleMerchant = custom distribution: installed on one nominated store,
+  // no App Store review, no review-pending state that can gate the Admin API.
+  distribution:   AppDistribution.SingleMerchant,
 
   // declared here, checked per request with billing.require()
   billing: {

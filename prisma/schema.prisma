@@ -154,8 +154,14 @@ model Comment {
 model PostImage {
   id        String   @id @default(cuid())
   postId    String
-  /// cdn.shopify.com url returned by fileCreate
-  url       String
+  /// bytes, when stored here. served by /images/:id.
+  /// fine at this size; if the forum ever holds thousands of photos this is
+  /// the first thing to move to object storage, because every backup carries
+  /// it and nothing is cached at an edge.
+  data        Bytes?
+  contentType String?
+  /// set instead of `data` when the image is hosted elsewhere
+  url       String?
   width     Int?
   height    Int?
   alt       String?

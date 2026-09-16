@@ -122,7 +122,14 @@ export function getPost(shopId: string, id: string) {
 export async function addPostImage(
   shopId: string,
   postId: string,
-  image: { url: string; width: number | null; height: number | null; alt: string | null },
+  image: {
+    data?: Uint8Array | null
+    contentType?: string | null
+    url?: string | null
+    width?: number | null
+    height?: number | null
+    alt?: string | null
+  },
 ) {
   // confirm the post is this shop's before attaching — PostImage has no shopId
   // of its own, so the scope has to be checked here
@@ -131,8 +138,33 @@ export async function addPostImage(
 
   const count = await prisma.postImage.count({ where: { postId } })
   return prisma.postImage.create({
-    data: { postId, position: count, ...image },
+    data: {
+      postId,
+      position: count,
+      // prisma types Bytes as Uint8Array<ArrayBuffer>; a Buffer or a view over
+      // a SharedArrayBuffer does not satisfy that, so normalise here
+      data: image.data ? new Uint8Array(image.data) : null,
+      contentType: image.contentType ?? null,
+      url: image.url ?? null,
+      width: image.width ?? null,
+      height: image.height ?? null,
+      alt: image.alt ?? null,
+    },
   })
+}
+
+/**
+ * Where to load an image from: an external url if it has one, otherwise this
+ * app's own route.
+ *
+ * `baseUrl` is required on the storefront — the markup renders on the shop's
+ * domain, so a relative path would resolve against the shop and 404.
+ */
+export function imageSrc(
+  image: { id: string; url?: string | null },
+  baseUrl = "",
+): string {
+  return image.url ?? `${baseUrl}/images/${image.id}`
 }
 
 export async function deletePostImage(shopId: string, postId: string, imageId: string) {

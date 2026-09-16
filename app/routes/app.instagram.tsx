@@ -53,7 +53,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { session, admin } = await authenticate.admin(request)
+  const { session } = await authenticate.admin(request)
   const shop = await requireShop(session.shop)
 
   const formData = await request.formData()
@@ -72,8 +72,7 @@ export async function action({ request }: ActionFunctionArgs) {
     if (!account) return redirect("/app/instagram")
 
     try {
-      // admin.graphql is what lets the import copy pictures into Shopify Files
-      const result = await syncAccount(account.id, { graphql: admin.graphql })
+      const result = await syncAccount(account.id)
       const params = new URLSearchParams({
         ig_synced: String(result.imported),
         ig_updated: String(result.updated),

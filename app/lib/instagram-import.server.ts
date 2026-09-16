@@ -7,7 +7,7 @@
 // this runs inline when the merchant clicks Sync, which is honest for one
 // account and wrong for a hundred. the ImportJob table is shaped for a real
 // worker (status, attempts, runAfter) so moving it to a background process is
-// a change of caller, not of schema — see docs/sqlite-to-postgres.md for the
+// a change of caller, not of schema -- see docs/sqlite-to-postgres.md for the
 // FOR UPDATE SKIP LOCKED claim that belongs with it.
 
 import type { InstagramAccount } from "@prisma/client"
@@ -25,12 +25,7 @@ import {
   needsRefresh,
 } from "./instagram.server"
 import { refreshLongLivedToken } from "./instagram.server"
-import {
-  MAX_IMAGE_BYTES,
-  uploadImageToShopify,
-  validateImage,
-  type GraphqlFn,
-} from "./shopify-files.server"
+import { validateImage } from "./shopify-files.server"
 
 export interface SyncResult {
   imported: number
@@ -45,14 +40,13 @@ export interface SyncResult {
  * Copy one Instagram picture into Shopify Files and attach it to the post.
  *
  * Copied rather than hotlinked because Instagram's cdn urls are signed and
- * expire — a forum full of dead images a fortnight after import is the
+ * expire -- a forum full of dead images a fortnight after import is the
  * failure mode, and it's silent.
  *
  * Returns false and logs on any problem: one unreadable picture should not
  * fail an entire sync.
  */
 async function copyMediaImage(
-  graphql: GraphqlFn,
   media: { id: string; media_type: string; media_url?: string; thumbnail_url?: string },
   postId: string,
   fetchImpl: typeof fetch,
@@ -67,30 +61,23 @@ async function copyMediaImage(
       return false
     }
 
-    const bytes = await response.arrayBuffer()
+    const bytes = new Uint8Array(await response.arrayBuffer())
     const type = response.headers.get("content-type")?.split(";")[0] ?? "image/jpeg"
-    const file = new File([bytes], `instagram-${media.id}.jpg`, { type })
 
-    const invalid = validateImage(file)
+    const invalid = validateImage({ size: bytes.byteLength, type, name: `${media.id}.jpg` })
     if (invalid) {
       console.error(`[instagram] skipping ${media.id}: ${invalid}`)
       return false
     }
 
-    // pass fetchImpl through — the staged upload POST is a plain fetch, and
-    // letting it fall back to the global one means it escapes any injected
-    // network, in tests and in anything that proxies outbound traffic
-    const uploaded = await uploadImageToShopify(graphql, file, `Instagram post ${media.id}`, {
-      fetchImpl,
-    })
-
+    // stored here rather than uploaded to Shopify Files: the import must not
+    // depend on Admin API access it might not have
     await prisma.postImage.create({
       data: {
         postId,
-        url: uploaded.url,
-        width: uploaded.width,
-        height: uploaded.height,
-        alt: uploaded.alt,
+        data: bytes,
+        contentType: type,
+        alt: `Instagram post ${media.id}`,
         position: 0,
       },
     })
@@ -108,8 +95,8 @@ const MAX_PAGES_PER_RUN = 4
 /**
  * Refresh the stored token if it is inside the margin.
  *
- * A token past expiry cannot be refreshed at all — the merchant has to
- * re-consent — so that case is recorded and surfaced rather than retried.
+ * A token past expiry cannot be refreshed at all -- the merchant has to
+ * re-consent -- so that case is recorded and surfaced rather than retried.
  */
 export async function ensureFreshToken(
   account: InstagramAccount,
@@ -160,16 +147,7 @@ async function importCategory(shopId: string) {
 
 export async function syncAccount(
   accountId: string,
-  options: {
-    fetchImpl?: typeof fetch
-    maxPages?: number
-    /**
-     * `admin.graphql`. Without it the import still runs, it just brings no
-     * pictures — which is the right degradation if the shop has not granted
-     * write_files.
-     */
-    graphql?: GraphqlFn
-  } = {},
+  options: { fetchImpl?: typeof fetch; maxPages?: number } = {},
 ): Promise<SyncResult> {
   const fetchImpl = options.fetchImpl ?? fetch
   const maxPages = options.maxPages ?? MAX_PAGES_PER_RUN
@@ -215,14 +193,11 @@ export async function syncAccount(
         if (result.createdAt.getTime() === result.updatedAt.getTime()) imported++
         else updated++
 
-        // only on first import: re-uploading the same picture on every sync
-        // would burn the shop's file storage and the api budget for nothing
-        if (options.graphql) {
-          const existing = await prisma.postImage.count({ where: { postId: result.id } })
-          if (existing === 0) {
-            const copied = await copyMediaImage(options.graphql, media, result.id, fetchImpl)
-            if (copied) images++
-          }
+        // only on first import: re-downloading the same picture on every sync
+        // would grow the database for nothing
+        const hasImage = await prisma.postImage.count({ where: { postId: result.id } })
+        if (hasImage === 0 && (await copyMediaImage(media, result.id, fetchImpl))) {
+          images++
         }
       }
 

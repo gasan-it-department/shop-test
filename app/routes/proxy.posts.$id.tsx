@@ -6,10 +6,11 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router"
 
 import prisma from "../db.server"
 import { cleanDisplayName } from "../lib/escape"
+import { imageSrc } from "../lib/forum.server"
 import { shopperHash } from "../lib/privacy.server"
 import { renderPostDetail } from "../lib/render-posts"
 import { commentSchema, parseForm } from "../lib/validation"
-import { authenticate } from "../shopify.server"
+import { appUrl, authenticate } from "../shopify.server"
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
   const { session, liquid } = await authenticate.public.appProxy(request)
@@ -43,8 +44,10 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       authorName: post.author?.displayName ?? null,
       categoryTitle: post.category.title,
       publishedAt: post.publishedAt.toISOString().slice(0, 10),
+      // absolute: this markup renders on the shop's domain, so a relative
+      // /images/... path would resolve against the shop and 404
       images: post.images.map((image) => ({
-        url: image.url,
+        url: imageSrc(image, appUrl),
         width: image.width,
         height: image.height,
         alt: image.alt,
