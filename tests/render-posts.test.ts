@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  excerptOf,
   renderPostDetail,
   renderPostList,
   type RenderablePost,
@@ -19,9 +20,9 @@ function post(overrides: Partial<RenderablePost> = {}): RenderablePost {
 }
 
 describe("renderPostList", () => {
-  it("renders one list item per post", () => {
+  it("renders one card per post", () => {
     const markup = renderPostList([post({ id: "a" }), post({ id: "b" })], "shop.myshopify.com")
-    expect(markup.match(/class="ic-post"/g)).toHaveLength(2)
+    expect(markup.match(/class="ic-card"/g)).toHaveLength(2)
   })
 
   it("renders an empty but valid list when there are no posts", () => {
@@ -59,34 +60,83 @@ describe("renderPostList", () => {
     expect(renderPostList([post({ id: "abc123" })], "s")).toContain("/apps/forum/posts/abc123")
   })
 
-  it("shows a thumbnail when the post has an image", () => {
+  it("shows the photo when the post has an image", () => {
     const markup = renderPostList(
       [post({ imageUrl: "https://app.example/images/img1" })],
       "shop.myshopify.com",
     )
-    expect(markup).toContain("ic-post__thumb")
+    expect(markup).toContain("ic-card__photo")
     expect(markup).toContain("https://app.example/images/img1")
-    // the chevron is replaced, not doubled up
-    expect(markup).not.toContain("ic-post__chevron")
   })
 
-  it("falls back to the chevron when there is no image", () => {
+  it("sizes the photo inline, so a stale stylesheet can't make it full-bleed", () => {
+    // the fragment ships from the app, the stylesheet ships with the theme
+    // extension, and they deploy separately — the markup has to stand alone
+    const markup = renderPostList([post({ imageUrl: "https://app.example/i" })], "s")
+    expect(markup).toContain("aspect-ratio:4/3")
+    expect(markup).toContain("max-height:420px")
+    expect(markup).toContain("object-fit:cover")
+  })
+
+  it("renders a card with no media block when there is no image", () => {
     const markup = renderPostList([post()], "shop.myshopify.com")
-    expect(markup).toContain("ic-post__chevron")
-    expect(markup).not.toContain("ic-post__thumb")
+    expect(markup).toContain("ic-card")
+    expect(markup).not.toContain("ic-card__media")
   })
 
-  it("renders no thumbnail for an unsafe image url", () => {
+  it("renders no photo for an unsafe image url", () => {
     const markup = renderPostList([post({ imageUrl: "javascript:alert(1)" })], "s")
-    expect(markup).not.toContain("ic-post__thumb")
+    expect(markup).not.toContain("ic-card__photo")
   })
 
-  it("keeps escaping the title when a thumbnail is present", () => {
+  it("keeps escaping the title when a photo is present", () => {
     const markup = renderPostList(
       [post({ title: `<script>alert(1)</script>`, imageUrl: "https://app.example/i" })],
       "s",
     )
     expect(markup).not.toContain("<script>")
+  })
+
+  it("renders the excerpt when there is one", () => {
+    const markup = renderPostList([post({ excerpt: "Going finer tastes bitter." })], "s")
+    expect(markup).toContain("ic-card__excerpt")
+    expect(markup).toContain("Going finer tastes bitter.")
+  })
+
+  it("omits the excerpt element when the body is blank", () => {
+    expect(renderPostList([post({ excerpt: "   " })], "s")).not.toContain("ic-card__excerpt")
+    expect(renderPostList([post()], "s")).not.toContain("ic-card__excerpt")
+  })
+
+  it("escapes a hostile excerpt", () => {
+    const markup = renderPostList([post({ excerpt: `<img src=x onerror=alert(1)>` })], "s")
+    expect(markup).not.toContain("<img src=x")
+  })
+})
+
+describe("excerptOf", () => {
+  it("leaves a short body alone, with no ellipsis", () => {
+    expect(excerptOf("Short and sweet.")).toBe("Short and sweet.")
+  })
+
+  it("collapses newlines and runs of whitespace", () => {
+    expect(excerptOf("one\n\n  two\t three")).toBe("one two three")
+  })
+
+  it("cuts on a word boundary and marks the cut", () => {
+    const out = excerptOf("alpha bravo charlie delta echo foxtrot", 20)
+    expect(out.endsWith("…")).toBe(true)
+    // no severed word before the ellipsis
+    expect(out.slice(0, -1).split(" ").pop()).toBe("charlie")
+  })
+
+  it("still cuts a body with no spaces in it", () => {
+    const out = excerptOf("x".repeat(400), 50)
+    expect(out).toHaveLength(51)
+  })
+
+  it("does not leave a space before the ellipsis", () => {
+    expect(excerptOf("alpha bravo charlie delta", 12)).not.toContain(" …")
   })
 })
 

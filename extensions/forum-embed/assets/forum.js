@@ -44,22 +44,27 @@
     "}",
 
     // --- header ---
+    // the heading lines up with the cards rather than with the theme's full
+    // content width, otherwise a 620px feed hangs under a 1100px title
     ".head { display: flex; align-items: baseline; justify-content: space-between;",
-    "        gap: 12px; margin-bottom: 18px; }",
+    "        gap: 12px; margin: 0 auto 18px; max-width: var(--ic-feed-width, 620px); }",
     ".heading { font-size: 22px; font-weight: 650; letter-spacing: -.02em; margin: 0;",
     "           line-height: 1.2; }",
     ".count { font-size: 13px; color: var(--ic-muted); white-space: nowrap; }",
 
-    // --- list ---
-    ".list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--ic-faint);",
-    "        border-radius: var(--ic-radius); overflow: hidden; background: var(--ic-surface); }",
-    ".ic-post + .ic-post { border-top: 1px solid var(--ic-faint); }",
+    // --- feed ---
+    // a stack of cards rather than one bordered list: a post with a photo is
+    // the unit people scroll, so each one gets its own edge and its own
+    // whitespace instead of sharing a hairline with its neighbours.
+    ".list { list-style: none; margin: 0 auto; padding: 0; display: grid;",
+    "        gap: 16px; max-width: var(--ic-feed-width, 620px); }",
+    ".ic-card { border: 1px solid var(--ic-faint); border-radius: var(--ic-radius);",
+    "           overflow: hidden; background: var(--ic-surface); }",
 
-    ".ic-post__link { display: flex; align-items: center; gap: var(--ic-gap);",
-    "                 padding: 16px 18px; text-decoration: none; color: inherit;",
+    ".ic-card__link { display: block; text-decoration: none; color: inherit;",
     "                 transition: background .14s ease; }",
-    ".ic-post__link:hover { background: var(--ic-hover); }",
-    ".ic-post__link:focus-visible { outline: 2px solid var(--ic-accent, currentColor);",
+    ".ic-card__link:hover { background: var(--ic-hover); }",
+    ".ic-card__link:focus-visible { outline: 2px solid var(--ic-accent, currentColor);",
     "                               outline-offset: -2px; }",
 
     // --- avatar ---
@@ -75,35 +80,52 @@
     ".ic-avatar[data-tint='5'] { background: rgba(70,150,168,.15); color: #2f6f7e; }",
     ".wrap[data-scheme='dark'] .ic-avatar { color: #fff; }",
 
-    // --- post body ---
-    ".ic-post__main { min-width: 0; flex: 1 1 auto; display: block; }",
-    ".ic-post__title { display: block; font-size: 15.5px; font-weight: 600;",
-    "                  letter-spacing: -.01em; line-height: 1.35; margin-bottom: 5px;",
-    "                  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }",
-    ".ic-post__meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px;",
-    "                 font-size: 13px; color: var(--ic-muted); }",
-    ".ic-post__author, .ic-post__replies { white-space: nowrap; }",
-    // a dot separator drawn in css, so the markup carries no decorative text
-    ".ic-post__replies::before { content: ''; display: inline-block; width: 3px; height: 3px;",
-    "                            border-radius: 50%; background: currentColor; opacity: .5;",
-    "                            vertical-align: middle; margin-right: 8px; }",
+    // --- card head: who posted, and where ---
+    ".ic-card__head { display: flex; align-items: center; gap: 10px;",
+    "                 padding: 14px 16px 10px; }",
+    ".ic-card__who { min-width: 0; display: block; }",
+    ".ic-card__author { display: block; font-size: 14px; font-weight: 600;",
+    "                   line-height: 1.3; overflow: hidden; text-overflow: ellipsis;",
+    "                   white-space: nowrap; }",
+    ".ic-card__where { display: block; margin-top: 3px; }",
 
-    ".ic-chip { font-size: 12px; font-weight: 550; padding: 2px 9px; border-radius: 99px;",
-    "           background: var(--ic-accent-soft, rgba(22,24,29,.07)); color: var(--ic-fg);",
+    ".ic-chip { display: inline-block; font-size: 12px; font-weight: 550;",
+    "           padding: 1px 8px; border-radius: 99px;",
+    "           background: var(--ic-accent-soft, rgba(22,24,29,.07)); color: var(--ic-muted);",
     "           white-space: nowrap; }",
     ".wrap[data-scheme='dark'] .ic-chip { background: rgba(242,243,245,.10); }",
 
-    ".ic-post__chevron { flex: 0 0 auto; font-size: 22px; line-height: 1; color: var(--ic-muted);",
-    "                    opacity: 0; transform: translateX(-4px);",
-    "                    transition: opacity .14s ease, transform .14s ease; }",
-    ".ic-post__link:hover .ic-post__chevron { opacity: .7; transform: none; }",
+    // --- card body ---
+    ".ic-card__title { font-size: 17px; font-weight: 650; letter-spacing: -.015em;",
+    "                  line-height: 1.3; margin: 0; padding: 0 16px 8px; }",
+    // the gap under the excerpt is margin, not padding: overflow clips at the
+    // padding edge, so bottom padding here would show a sliver of the line
+    // the clamp is supposed to be hiding
+    ".ic-card__excerpt { margin: 0 0 14px; padding: 0 16px; font-size: 14.5px;",
+    "                    line-height: 1.55; color: var(--ic-muted);",
+    // two lines of preview: enough to be worth reading, short enough that ten
+    // cards still fit on a screen's worth of scrolling
+    "                    display: -webkit-box; -webkit-line-clamp: 2;",
+    "                    -webkit-box-orient: vertical; overflow: hidden; }",
 
-    // thumbnail sits where the chevron would, so illustrated and plain rows
-    // keep the same height and the list still scans as one column
-    ".ic-post__thumb { flex: 0 0 auto; width: 64px; height: 64px; border-radius: 10px;",
-    "                  object-fit: cover; background: var(--ic-faint);",
+    // the photo goes edge to edge, the way a feed post does. the element is
+    // also sized inline in the markup, so a card rendered before this
+    // stylesheet lands is still a card and not a wall.
+    ".ic-card__media { display: block; background: var(--ic-faint); }",
+    ".ic-card__photo { display: block; width: 100%; aspect-ratio: 4 / 3;",
+    "                  max-height: 420px; object-fit: cover;",
     "                  transition: opacity .14s ease; }",
-    ".ic-post__link:hover .ic-post__thumb { opacity: .88; }",
+    ".ic-card__link:hover .ic-card__photo { opacity: .94; }",
+
+    // --- card foot ---
+    ".ic-card__foot { display: flex; align-items: center; gap: 14px;",
+    "                 padding: 11px 16px; font-size: 13px; color: var(--ic-muted); }",
+    ".ic-card__media + .ic-card__foot { border-top: 1px solid var(--ic-faint); }",
+    // a speech bubble drawn in css, so the markup carries no decorative text
+    ".ic-card__replies::before { content: ''; display: inline-block;",
+    "                            width: 13px; height: 11px; margin-right: 7px;",
+    "                            vertical-align: -1px; border: 1.5px solid currentColor;",
+    "                            border-radius: 4px 4px 4px 0; opacity: .7; }",
 
     // --- states ---
     ".state { border: 1px solid var(--ic-faint); border-radius: var(--ic-radius);",
@@ -111,26 +133,30 @@
     ".state strong { display: block; color: var(--ic-fg); font-size: 15px; font-weight: 600;",
     "                margin-bottom: 4px; }",
 
-    // skeleton rows, so the first paint has the shape of the answer
-    ".skeleton { list-style: none; margin: 0; padding: 0; border: 1px solid var(--ic-faint);",
-    "            border-radius: var(--ic-radius); overflow: hidden; }",
-    ".skeleton li { display: flex; align-items: center; gap: var(--ic-gap); padding: 16px 18px; }",
-    ".skeleton li + li { border-top: 1px solid var(--ic-faint); }",
+    // skeleton cards, so the first paint has the shape of the answer
+    ".skeleton { list-style: none; margin: 0 auto; padding: 0; display: grid; gap: 16px;",
+    "            max-width: var(--ic-feed-width, 620px); }",
+    ".skeleton li { border: 1px solid var(--ic-faint); border-radius: var(--ic-radius);",
+    "               overflow: hidden; }",
+    ".sk-head { display: flex; align-items: center; gap: 10px; padding: 14px 16px 10px; }",
     ".sk { background: var(--ic-faint); border-radius: 6px; animation: ic-pulse 1.4s ease-in-out infinite; }",
     ".sk--avatar { width: 40px; height: 40px; border-radius: 50%; flex: 0 0 auto; }",
     ".sk--lines { flex: 1 1 auto; }",
-    ".sk--title { height: 11px; width: 58%; margin-bottom: 8px; }",
-    ".sk--meta { height: 9px; width: 34%; }",
+    ".sk--title { height: 11px; width: 42%; margin-bottom: 8px; }",
+    ".sk--meta { height: 9px; width: 26%; }",
+    // the photo block is most of a card's height, so leaving it out would make
+    // the skeleton jump when the real cards land
+    ".sk--photo { border-radius: 0; aspect-ratio: 4 / 3; max-height: 420px; }",
     "@keyframes ic-pulse { 0%,100% { opacity: 1 } 50% { opacity: .45 } }",
     "@media (prefers-reduced-motion: reduce) { .sk { animation: none } }",
 
     // --- narrow screens ---
     "@media (max-width: 480px) {",
-    "  .ic-post__link { padding: 14px; gap: 12px; }",
+    "  .ic-card__head { padding: 12px 14px 8px; }",
     "  .ic-avatar { width: 34px; height: 34px; font-size: 12px; }",
-    "  .ic-post__title { white-space: normal; }",
-    "  .ic-post__chevron { display: none; }",
-    "  .ic-post__thumb { width: 52px; height: 52px; border-radius: 8px; }",
+    "  .ic-card__title { font-size: 16px; padding: 0 14px 7px; }",
+    "  .ic-card__excerpt { margin-bottom: 12px; padding: 0 14px; }",
+    "  .ic-card__foot { padding: 10px 14px; }",
     "}",
   ].join("\n")
 
@@ -143,13 +169,16 @@
 
   function skeleton() {
     var ul = el("ul", "skeleton")
-    for (var i = 0; i < 3; i++) {
+    for (var i = 0; i < 2; i++) {
       var li = document.createElement("li")
-      li.appendChild(el("div", "sk sk--avatar"))
+      var head = el("div", "sk-head")
+      head.appendChild(el("div", "sk sk--avatar"))
       var lines = el("div", "sk--lines")
       lines.appendChild(el("div", "sk sk--title"))
       lines.appendChild(el("div", "sk sk--meta"))
-      li.appendChild(lines)
+      head.appendChild(lines)
+      li.appendChild(head)
+      li.appendChild(el("div", "sk sk--photo"))
       ul.appendChild(li)
     }
     return ul

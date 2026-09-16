@@ -9,7 +9,7 @@ import prisma from "../db.server"
 import { cleanDisplayName, safeUrl } from "../lib/escape"
 import { imageSrc } from "../lib/forum.server"
 import { shopperHash } from "../lib/privacy.server"
-import { renderPostList } from "../lib/render-posts"
+import { excerptOf, renderPostList } from "../lib/render-posts"
 import { appUrl, authenticate } from "../shopify.server"
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -46,6 +46,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       authorName: post.author?.displayName ?? null,
       categoryTitle: post.category.title,
       commentCount: post._count.comments,
+      excerpt: excerptOf(post.body),
       // absolute: this fragment is injected into a page on the shop's domain,
       // so a relative /images/... path would resolve against the shop
       imageUrl: post.images[0] ? imageSrc(post.images[0], appUrl) : null,

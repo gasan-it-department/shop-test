@@ -4,7 +4,7 @@
 import prisma from "../db.server"
 import { assertDevHarness } from "../lib/dev-mode.server"
 import { imageSrc } from "../lib/forum.server"
-import { renderPostList } from "../lib/render-posts"
+import { excerptOf, renderPostList } from "../lib/render-posts"
 
 export async function loader() {
   assertDevHarness()
@@ -35,6 +35,7 @@ export async function loader() {
       authorName: post.author?.displayName ?? null,
       categoryTitle: post.category.title,
       commentCount: post._count.comments,
+      excerpt: excerptOf(post.body),
       // relative here: the harness serves from this app's own origin
       imageUrl: post.images[0] ? imageSrc(post.images[0]) : null,
     })),

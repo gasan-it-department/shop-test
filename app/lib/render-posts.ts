@@ -11,6 +11,24 @@ export interface RenderablePost {
   commentCount: number
   /** first attached image, absolute — this markup renders on the shop's domain */
   imageUrl?: string | null
+  /** first line or two of the body, so a card reads like a post and not a link */
+  excerpt?: string | null
+}
+
+/**
+ * Cut a body down to a card-sized preview.
+ *
+ * Breaks on a word so the tail isn't a severed word, and only appends the
+ * ellipsis when something was actually removed.
+ */
+export function excerptOf(body: string, limit = 180): string {
+  const flat = body.replace(/\s+/g, " ").trim()
+  if (flat.length <= limit) return flat
+
+  const cut = flat.slice(0, limit)
+  const lastSpace = cut.lastIndexOf(" ")
+  // a body with no spaces at all (one long url) still has to be cut somewhere
+  return `${(lastSpace > limit * 0.6 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`
 }
 
 /** "Ana Reyes" -> "AR", "thatone" -> "TH". Never empty. */
@@ -36,39 +54,49 @@ export function tintIndex(name: string, buckets = 6): number {
   return hash % buckets
 }
 
+// a card is only as tall as its photo lets it be. these live inline rather
+// than in the stylesheet because the fragment ships from the app and the
+// stylesheet ships with the theme extension, on separate deploys — a photo
+// that arrives before its css must not render at its full natural size.
+const PHOTO_STYLE =
+  "display:block;width:100%;aspect-ratio:4/3;max-height:420px;object-fit:cover"
+
 export function renderPostList(posts: RenderablePost[], shop: string): string {
   const items = posts
     .map((post) => {
       const author = cleanDisplayName(post.authorName ?? "Member")
       const replies = post.commentCount === 1 ? "1 reply" : `${post.commentCount} replies`
 
-      // a thumbnail where there is one, the chevron where there isn't — the
-      // row keeps the same height either way, so a feed with some illustrated
-      // posts and some not still scans as one list
-      const thumbSrc = post.imageUrl ? attrUrl(post.imageUrl) : ""
-      const trailing = thumbSrc
-        ? `<img class="ic-post__thumb" src="${thumbSrc}" alt="" loading="lazy" decoding="async">`
-        : `<span class="ic-post__chevron" aria-hidden="true">&rsaquo;</span>`
+      const photoSrc = post.imageUrl ? attrUrl(post.imageUrl) : ""
+      const media = photoSrc
+        ? `<span class="ic-card__media"><img class="ic-card__photo" src="${photoSrc}" alt="" loading="lazy" decoding="async" style="${PHOTO_STYLE}"></span>`
+        : ""
+
+      const excerpt = post.excerpt?.trim()
+        ? html`<p class="ic-card__excerpt">${post.excerpt}</p>`
+        : ""
 
       // escaped content and raw markup kept apart: every value below goes
-      // through the tagged template, `trailing` is markup we built ourselves
-      const inner = html`
-        <span class="ic-avatar" data-tint="${tintIndex(author)}" aria-hidden="true"
-          >${initials(author)}</span
-        >
-        <span class="ic-post__main">
-          <span class="ic-post__title">${post.title}</span>
-          <span class="ic-post__meta">
-            <span class="ic-chip">${post.categoryTitle}</span>
-            <span class="ic-post__author">${author}</span>
-            <span class="ic-post__replies">${replies}</span>
+      // through the tagged template, `media` and `excerpt` are markup we built
+      const head = html`
+        <span class="ic-card__head">
+          <span class="ic-avatar" data-tint="${tintIndex(author)}" aria-hidden="true"
+            >${initials(author)}</span
+          >
+          <span class="ic-card__who">
+            <span class="ic-card__author">${author}</span>
+            <span class="ic-card__where"><span class="ic-chip">${post.categoryTitle}</span></span>
           </span>
         </span>
+        <h3 class="ic-card__title">${post.title}</h3>
       `
+      const foot = html`<span class="ic-card__foot"
+        ><span class="ic-card__replies">${replies}</span></span
+      >`
 
-      return `<li class="ic-post"><a class="ic-post__link" href="/apps/forum/posts/${escapeHtml(
+      return `<li class="ic-card"><a class="ic-card__link" href="/apps/forum/posts/${escapeHtml(
         post.id,
-      )}">${inner}${trailing}</a></li>`
+      )}">${head}${excerpt}${media}${foot}</a></li>`
     })
     .join("")
 
