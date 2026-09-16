@@ -16,5 +16,13 @@ export default {
   // is listed for the cases where one is forwarded. Those routes verify
   // Shopify's HMAC signature regardless, which is stronger than an origin
   // check.
-  allowedActionOrigins: ["admin.shopify.com", "*.myshopify.com"],
+  //
+  // *.up.railway.app is a safety net, not the fix. The real cause of the 400
+  // was the host's own origin failing the comparison because express reported
+  // http behind Railway's TLS termination — server.mjs sets `trust proxy` to
+  // correct that. This entry means a misconfigured proxy degrades to a working
+  // app rather than a dead one, and it costs little: every admin action is
+  // still gated by a Shopify session token that a third-party page cannot
+  // forge.
+  allowedActionOrigins: ["admin.shopify.com", "*.myshopify.com", "*.up.railway.app"],
 } satisfies Config

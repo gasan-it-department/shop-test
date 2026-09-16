@@ -19,6 +19,10 @@ describe("allowedActionOrigins", () => {
     expect(config.allowedActionOrigins).toContain("*.myshopify.com")
   })
 
+  it("keeps the host's own domain as a safety net for a misconfigured proxy", () => {
+    expect(config.allowedActionOrigins).toContain("*.up.railway.app")
+  })
+
   it("does not allow everything", () => {
     expect(config.allowedActionOrigins).not.toContain("*")
   })
