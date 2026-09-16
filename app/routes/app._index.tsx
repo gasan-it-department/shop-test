@@ -17,7 +17,7 @@ interface ShopInfo {
  */
 async function fetchShopInfo(
   admin: Awaited<ReturnType<typeof authenticate.admin>>["admin"],
-): Promise<ShopInfo | null> {
+): Promise<{ info: ShopInfo | null; diagnostic: string | null }> {
   try {
     const response = await admin.graphql(`#graphql
       query ShopInfo {
@@ -29,13 +29,22 @@ async function fetchShopInfo(
     `)
     const body = (await response.json()) as { data?: { shop?: ShopInfo }; errors?: unknown }
     if (!body.data?.shop) {
-      console.error("[app] ShopInfo returned no data:", JSON.stringify(body.errors ?? body))
-      return null
+      const detail = JSON.stringify(body.errors ?? body)
+      console.error("[app] ShopInfo returned no data:", detail)
+      return { info: null, diagnostic: detail.slice(0, 300) }
     }
-    return body.data.shop
+    return { info: body.data.shop, diagnostic: null }
   } catch (error) {
-    console.error("[app] ShopInfo request failed:", error)
-    return null
+    // the admin client throws the Response itself on a non-2xx, and the body
+    // carries shopify's actual reason — logging the object alone prints
+    // "Response { status: 403 }" and tells you nothing
+    let detail = error instanceof Error ? error.message : String(error)
+    if (error instanceof Response) {
+      const text = await error.text().catch(() => "")
+      detail = `HTTP ${error.status} ${text}`.trim()
+    }
+    console.error("[app] ShopInfo request failed:", detail)
+    return { info: null, diagnostic: detail.slice(0, 300) }
   }
 }
 
@@ -43,12 +52,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const { session, admin } = await authenticate.admin(request)
 
   const shop = await requireShop(session.shop)
-  const [info, overview] = await Promise.all([fetchShopInfo(admin), shopOverview(shop.id)])
+  const [shopInfo, overview] = await Promise.all([fetchShopInfo(admin), shopOverview(shop.id)])
+  const info = shopInfo.info
 
   return {
     shopName: info?.name ?? session.shop.replace(".myshopify.com", ""),
     timezone: info?.ianaTimezone ?? shop.timezone,
     adminApiOk: info !== null,
+    // what the token ACTUALLY carries, which is the only way to tell whether a
+    // scope change reached the installed app or just the config file
+    grantedScopes: session.scope ?? "(none recorded)",
+    apiDiagnostic: shopInfo.diagnostic,
     storefrontUrl: `https://${session.shop}`,
     counts: overview.counts,
     recent: overview.recent.map((post) => ({
@@ -63,8 +77,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export default function Overview() {
-  const { shopName, timezone, adminApiOk, storefrontUrl, counts, recent } =
-    useLoaderData<typeof loader>()
+  const {
+    shopName,
+    timezone,
+    adminApiOk,
+    storefrontUrl,
+    counts,
+    recent,
+    grantedScopes,
+    apiDiagnostic,
+  } = useLoaderData<typeof loader>()
 
   return (
     <div className="page">
@@ -97,6 +119,40 @@ export default function Overview() {
           Storefront: <code>{storefrontUrl}/apps/forum</code>
         </p>
       </Card>
+
+      {!adminApiOk ? (
+        <Card title="Admin API diagnostic">
+          <p style={{ marginTop: 0 }}>
+            Scopes this shop&rsquo;s token actually carries:
+          </p>
+          <p>
+            <code>{grantedScopes}</code>
+          </p>
+          <p className="cell-muted">
+            If that list differs from the SCOPES variable, the app was reinstalled without the
+            change taking, or not reinstalled at all — a token keeps whatever scopes it was
+            issued with.
+          </p>
+          {apiDiagnostic ? (
+            <>
+              <p style={{ marginBottom: 4 }}>Shopify&rsquo;s response:</p>
+              <pre
+                style={{
+                  background: "#fff",
+                  border: "1px solid var(--border)",
+                  borderRadius: 8,
+                  padding: 12,
+                  overflowX: "auto",
+                  font: "12px/1.5 ui-monospace, Consolas, monospace",
+                  whiteSpace: "pre-wrap",
+                }}
+              >
+                {apiDiagnostic}
+              </pre>
+            </>
+          ) : null}
+        </Card>
+      ) : null}
 
       <Card
         title="Recent posts"
