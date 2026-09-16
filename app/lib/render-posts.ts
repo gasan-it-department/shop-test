@@ -90,15 +90,15 @@ export interface RenderablePostDetail {
 const DETAIL_STYLES = `
   .ic-page { --ic-line: rgba(128,128,128,.22);
              --ic-soft: rgba(128,128,128,.09);
-             max-width: 44rem; margin: 0 auto; padding: 2.5rem 1.25rem 5rem; }
+             max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
 
-  .ic-back { display: inline-flex; align-items: center; gap: .4em; margin-bottom: 2rem;
+  .ic-back { display: inline-flex; align-items: center; gap: .4em; margin-bottom: 1.75rem;
              font-size: .875rem; opacity: .6; text-decoration: none; color: inherit; }
   .ic-back:hover { opacity: 1; }
 
-  .ic-byline { display: flex; align-items: center; gap: .75rem; margin-bottom: 1.25rem; }
-  .ic-avatar { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%;
-               display: grid; place-items: center; font-size: .8125rem; font-weight: 650;
+  .ic-byline { display: flex; align-items: center; gap: .625rem; margin-bottom: 1rem; }
+  .ic-avatar { flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%;
+               display: grid; place-items: center; font-size: .75rem; font-weight: 650;
                background: var(--ic-soft); }
   .ic-avatar[data-tint='0'] { background: rgba(88,124,212,.16); color: #3f5ea8; }
   .ic-avatar[data-tint='1'] { background: rgba(58,160,120,.16); color: #2b7a58; }
@@ -112,8 +112,11 @@ const DETAIL_STYLES = `
   .ic-chip { display: inline-block; font-size: .75rem; font-weight: 550; padding: .15em .7em;
              border-radius: 99px; background: var(--ic-soft); margin-right: .5rem; }
 
-  .ic-post__category { margin: 0 0 .75rem; }
-  .ic-post__title { margin: 0 0 1.25rem; line-height: 1.2; letter-spacing: -.02em; }
+  .ic-post__category { margin: 0 0 .625rem; }
+  /* themes set enormous h1 scales for hero sections. cap it, or a three-word
+     post title dwarfs the thread underneath it. */
+  .ic-post__title { margin: 0 0 1rem; font-size: clamp(1.5rem, 3.2vw, 2rem);
+                    line-height: 1.22; letter-spacing: -.021em; font-weight: 650; }
   .ic-post__body { line-height: 1.75; white-space: pre-wrap; word-break: break-word;
                    font-size: 1.0625rem; }
 
