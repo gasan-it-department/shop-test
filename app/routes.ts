@@ -36,4 +36,5 @@ export default [
   // 404 in production unless ENABLE_DEV_HARNESS=1
   route("dev", "routes/dev.tsx"),
   route("dev/posts", "routes/dev.posts.tsx"),
+  route("dev/posts/:id", "routes/dev.posts.$id.tsx"),
 ] satisfies RouteConfig

@@ -4,6 +4,9 @@
 
   No inline script with interpolated data, no jQuery, no global CSS —
   everything renders inside a shadow root in forum.js.
+
+  The colour settings are passed as data attributes rather than baked into the
+  stylesheet so one cached forum.js serves every shop.
 {% endcomment %}
 
 <div
@@ -13,7 +16,12 @@
   data-category="{{ block.settings.category | escape }}"
   data-customer-id="{{ customer.id | default: '' }}"
   data-heading="{{ block.settings.heading | escape }}"
-  style="--ic-accent: {{ block.settings.accent_color }};"
+  data-scheme="{{ block.settings.color_scheme }}"
+  style="
+    --ic-accent: {{ block.settings.accent_color }};
+    --ic-accent-soft: {{ block.settings.accent_color | color_modify: 'alpha', 0.10 }};
+    margin: {{ block.settings.margin_top }}px 0 {{ block.settings.margin_bottom }}px;
+  "
 >
   <noscript>
     <p>{{ 'forum.javascript_required' | t }}</p>
@@ -40,10 +48,42 @@
       "info": "Leave blank to show every public category."
     },
     {
+      "type": "select",
+      "id": "color_scheme",
+      "label": "Colour scheme",
+      "info": "Pick dark if this section sits on a dark background.",
+      "options": [
+        { "value": "light", "label": "Light" },
+        { "value": "dark", "label": "Dark" }
+      ],
+      "default": "light"
+    },
+    {
       "type": "color",
       "id": "accent_color",
       "label": "Accent colour",
+      "info": "Used for category tags and focus outlines.",
       "default": "#1a1a1a"
+    },
+    {
+      "type": "range",
+      "id": "margin_top",
+      "label": "Space above",
+      "min": 0,
+      "max": 96,
+      "step": 4,
+      "unit": "px",
+      "default": 40
+    },
+    {
+      "type": "range",
+      "id": "margin_bottom",
+      "label": "Space below",
+      "min": 0,
+      "max": 96,
+      "step": 4,
+      "unit": "px",
+      "default": 40
     }
   ]
 }
