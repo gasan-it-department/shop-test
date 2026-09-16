@@ -92,11 +92,27 @@ export async function action({ request, params }: ActionFunctionArgs) {
       )
       await addPostImage(shop.id, id, uploaded)
     } catch (error) {
-      // an upload failure is not a reason to lose the page
-      const message =
-        error instanceof ImageUploadError ? error.message : "The image could not be uploaded"
       console.error("[images] upload failed:", error)
-      return data<ActionErrors>({ imageError: message }, { status: 502 })
+
+      // surface what actually went wrong. a generic "could not be uploaded"
+      // means reading the server logs for every failure, which is exactly the
+      // loop worth not being in.
+      let message: string
+      if (error instanceof ImageUploadError) {
+        message = error.message
+      } else if (error instanceof Response) {
+        // the admin client throws the Response on a non-2xx
+        message =
+          error.status === 403
+            ? "Shopify refused the upload (403). The app needs the write_files scope — run `shopify app deploy`, then reopen the app and approve the new permission."
+            : `Shopify returned ${error.status} for the upload`
+      } else if (error instanceof Error) {
+        message = error.message
+      } else {
+        message = String(error)
+      }
+
+      return data<ActionErrors>({ imageError: message.slice(0, 300) }, { status: 502 })
     }
 
     return redirect(`/app/posts/${id}`)

@@ -119,6 +119,10 @@ export default function NewPost() {
               <Link to="/app/posts" className="btn">
                 Cancel
               </Link>
+              {/* images attach to a post id, which does not exist until this
+                  form is submitted. say so rather than leaving people hunting
+                  for an upload button that cannot be here. */}
+              <span className="cell-muted">Add images on the next screen.</span>
             </div>
           </Form>
         </Card>
