@@ -14,7 +14,12 @@ import {
   requireShop,
   updatePost,
 } from "../lib/forum.server"
-import { ImageUploadError, uploadImageToShopify, validateImage } from "../lib/shopify-files.server"
+import {
+  describeAdminError,
+  ImageUploadError,
+  uploadImageToShopify,
+  validateImage,
+} from "../lib/shopify-files.server"
 import { commentSchema, parseForm, postSchema, type FieldErrors } from "../lib/validation"
 import { authenticate } from "../shopify.server"
 
@@ -92,27 +97,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
       )
       await addPostImage(shop.id, id, uploaded)
     } catch (error) {
-      console.error("[images] upload failed:", error)
+      // read the body — the admin client throws the Response, and the reason
+      // is inside it
+      const detail = await describeAdminError(error)
+      console.error("[images] upload failed:", detail, "| granted scopes:", session.scope)
 
-      // surface what actually went wrong. a generic "could not be uploaded"
-      // means reading the server logs for every failure, which is exactly the
-      // loop worth not being in.
-      let message: string
-      if (error instanceof ImageUploadError) {
-        message = error.message
-      } else if (error instanceof Response) {
-        // the admin client throws the Response on a non-2xx
-        message =
-          error.status === 403
-            ? "Shopify refused the upload (403). The app needs the write_files scope — run `shopify app deploy`, then reopen the app and approve the new permission."
-            : `Shopify returned ${error.status} for the upload`
-      } else if (error instanceof Error) {
-        message = error.message
-      } else {
-        message = String(error)
-      }
+      const message =
+        error instanceof ImageUploadError
+          ? error.message
+          : `${detail}\n\nScopes on this token: ${session.scope ?? "(none)"}`
 
-      return data<ActionErrors>({ imageError: message.slice(0, 300) }, { status: 502 })
+      return data<ActionErrors>({ imageError: message.slice(0, 500) }, { status: 502 })
     }
 
     return redirect(`/app/posts/${id}`)

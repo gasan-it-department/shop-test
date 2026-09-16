@@ -3,6 +3,7 @@ import type { LoaderFunctionArgs } from "react-router"
 
 import { Badge, Card, EmptyState, PageHeader, formatDate } from "../components/ui"
 import { requireShop, shopOverview } from "../lib/forum.server"
+import { describeAdminError } from "../lib/shopify-files.server"
 import { authenticate } from "../shopify.server"
 
 interface ShopInfo {
@@ -35,14 +36,7 @@ async function fetchShopInfo(
     }
     return { info: body.data.shop, diagnostic: null }
   } catch (error) {
-    // the admin client throws the Response itself on a non-2xx, and the body
-    // carries shopify's actual reason — logging the object alone prints
-    // "Response { status: 403 }" and tells you nothing
-    let detail = error instanceof Error ? error.message : String(error)
-    if (error instanceof Response) {
-      const text = await error.text().catch(() => "")
-      detail = `HTTP ${error.status} ${text}`.trim()
-    }
+    const detail = await describeAdminError(error)
     console.error("[app] ShopInfo request failed:", detail)
     return { info: null, diagnostic: detail.slice(0, 300) }
   }

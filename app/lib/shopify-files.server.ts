@@ -49,6 +49,22 @@ export class ImageUploadError extends Error {
   }
 }
 
+/**
+ * Turn whatever the admin client threw into a readable string.
+ *
+ * It throws the `Response` itself on a non-2xx, and logging that object prints
+ * `Response { status: 403, body: ReadableStream }` — which says nothing. The
+ * reason is in the body, and it has to be read before it is any use.
+ */
+export async function describeAdminError(error: unknown): Promise<string> {
+  if (error instanceof Response) {
+    const text = await error.text().catch(() => "")
+    return `HTTP ${error.status} ${text}`.trim()
+  }
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
 /** rejects anything we would not want a merchant — or a shopper — sending */
 export function validateImage(file: {
   size: number
