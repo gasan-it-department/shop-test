@@ -50,9 +50,13 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       })),
     },
     Boolean(customerId),
+    url.searchParams.get("error"),
   )
 
-  return liquid(markup, { layout: false, headers: { "cache-control": "no-store" } })
+  // WITH the theme layout, unlike the list fragment. this is a full page the
+  // shopper navigated to, so it should carry the merchant's header, footer and
+  // styles — `layout: false` here renders bare unstyled html on their domain.
+  return liquid(markup, { headers: { "cache-control": "no-store" } })
 }
 
 /**

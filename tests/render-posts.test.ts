@@ -119,6 +119,30 @@ describe("renderPostDetail", () => {
     )
   })
 
+  it("ships its own styles, since there is no shadow root on a full page", () => {
+    const markup = renderPostDetail(detail(), false)
+    expect(markup).toContain("<style>")
+    expect(markup).toContain(".ic-post__title")
+  })
+
+  it("shows an error passed back by the post/redirect/get", () => {
+    expect(renderPostDetail(detail(), true, "Comment must not be empty")).toContain(
+      "Comment must not be empty",
+    )
+  })
+
+  it("escapes an error message from the query string", () => {
+    const markup = renderPostDetail(detail(), true, `<img src=x onerror=alert(1)>`)
+    expect(markup).not.toContain("<img src=x")
+  })
+
+  it("omits the error element when there is no error", () => {
+    // the class name is always present in the stylesheet, so assert on the
+    // element rather than the substring
+    expect(renderPostDetail(detail(), true)).not.toContain(`class="ic-error"`)
+    expect(renderPostDetail(detail(), true, "boom")).toContain(`class="ic-error"`)
+  })
+
   it("renders every comment", () => {
     const markup = renderPostDetail(
       detail({
