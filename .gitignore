@@ -10,3 +10,4 @@ prisma/dev.sqlite*
 .shopify
 dist
 coverage
+.pglite

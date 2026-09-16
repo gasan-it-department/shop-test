@@ -18,7 +18,9 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --exclude 'tests/db/**'",
+    "test:db": "vitest run tests/db",
+    "db:local": "node scripts/local-db.mjs",
     "test:watch": "vitest",
     "lint": "tsc --noEmit"
   },
@@ -36,6 +38,8 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
     "@react-router/dev": "^7.18.3",
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.12",

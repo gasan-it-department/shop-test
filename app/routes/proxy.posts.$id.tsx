@@ -55,28 +55,54 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
   return liquid(markup, { layout: false, headers: { "cache-control": "no-store" } })
 }
 
+/**
+ * The comment form in the theme extension is a plain <form>, so a JSON body
+ * would be rendered as raw text in the shopper's browser. Answer HTML
+ * submissions with a redirect back to the post (post/redirect/get) and keep
+ * JSON for anything calling this with fetch.
+ */
+function respond(request: Request, postId: string, payload: unknown, status: number) {
+  const wantsHtml = request.headers.get("accept")?.includes("text/html")
+  if (!wantsHtml) return Response.json(payload, { status })
+
+  const target = new URL(`/apps/forum/posts/${postId}`, "https://placeholder.invalid")
+  if (status >= 400 && typeof payload === "object" && payload !== null) {
+    const message =
+      "error" in payload
+        ? String((payload as { error: unknown }).error)
+        : Object.values((payload as { errors?: Record<string, string> }).errors ?? {})[0]
+    if (message) target.searchParams.set("error", message)
+  }
+
+  return new Response(null, {
+    status: 303,
+    headers: { location: `${target.pathname}${target.search}` },
+  })
+}
+
 export async function action({ request, params }: ActionFunctionArgs) {
   const { session } = await authenticate.public.appProxy(request)
   if (!session) return new Response("Not found", { status: 404 })
 
+  const postId = params.id ?? ""
   const url = new URL(request.url)
   // the only identity signal we can trust here — a body field can't be
   const customerId = url.searchParams.get("logged_in_customer_id")
   if (!customerId) {
-    return Response.json({ error: "Sign in to comment" }, { status: 401 })
+    return respond(request, postId, { error: "Sign in to comment" }, 401)
   }
 
   const formData = await request.formData()
   const parsed = parseForm(commentSchema, formData)
   if (!parsed.ok) {
-    return Response.json({ errors: parsed.errors }, { status: 422 })
+    return respond(request, postId, { errors: parsed.errors }, 422)
   }
 
   const shop = await prisma.shop.findUnique({ where: { domain: session.shop } })
   if (!shop) return new Response("Not found", { status: 404 })
 
   const post = await prisma.post.findFirst({
-    where: { id: params.id ?? "", shopId: shop.id, category: { isPrivate: false } },
+    where: { id: postId, shopId: shop.id, category: { isPrivate: false } },
   })
   if (!post) return new Response("Not found", { status: 404 })
 
@@ -112,5 +138,5 @@ export async function action({ request, params }: ActionFunctionArgs) {
     },
   })
 
-  return Response.json({ id: comment.id }, { status: 201 })
+  return respond(request, postId, { id: comment.id }, 201)
 }
