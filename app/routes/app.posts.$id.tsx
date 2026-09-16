@@ -4,14 +4,17 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router"
 
 import { Badge, Banner, Card, Field, PageHeader, formatDate } from "../components/ui"
 import {
+  addPostImage,
   createComment,
   deleteComment,
   deletePost,
+  deletePostImage,
   getPost,
   listCategories,
   requireShop,
   updatePost,
 } from "../lib/forum.server"
+import { ImageUploadError, uploadImageToShopify, validateImage } from "../lib/shopify-files.server"
 import { commentSchema, parseForm, postSchema, type FieldErrors } from "../lib/validation"
 import { authenticate } from "../shopify.server"
 
@@ -20,6 +23,7 @@ import { authenticate } from "../shopify.server"
 interface ActionErrors {
   errors?: FieldErrors
   commentErrors?: FieldErrors
+  imageError?: string
 }
 
 export async function loader({ request, params }: LoaderFunctionArgs) {
@@ -45,6 +49,13 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       anonymised: post.author?.anonymisedAt !== null && post.author?.anonymisedAt !== undefined,
       publishedAt: post.publishedAt.toISOString(),
       updatedAt: post.updatedAt.toISOString(),
+      images: post.images.map((image) => ({
+        id: image.id,
+        // shopify serves resized variants straight off the url
+        thumb: `${image.url}${image.url.includes("?") ? "&" : "?"}width=200`,
+        url: image.url,
+        alt: image.alt,
+      })),
       comments: post.comments.map((comment) => ({
         id: comment.id,
         body: comment.body,
@@ -57,12 +68,44 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
-  const { session } = await authenticate.admin(request)
+  const { session, admin } = await authenticate.admin(request)
   const shop = await requireShop(session.shop)
   const id = params.id ?? ""
 
   const formData = await request.formData()
   const intent = formData.get("intent")
+
+  if (intent === "add-image") {
+    const file = formData.get("image")
+    if (!(file instanceof File)) {
+      return data<ActionErrors>({ imageError: "Choose an image first" }, { status: 422 })
+    }
+
+    const invalid = validateImage(file)
+    if (invalid) return data<ActionErrors>({ imageError: invalid }, { status: 422 })
+
+    try {
+      const uploaded = await uploadImageToShopify(
+        admin.graphql,
+        file,
+        String(formData.get("alt") ?? "").trim() || file.name,
+      )
+      await addPostImage(shop.id, id, uploaded)
+    } catch (error) {
+      // an upload failure is not a reason to lose the page
+      const message =
+        error instanceof ImageUploadError ? error.message : "The image could not be uploaded"
+      console.error("[images] upload failed:", error)
+      return data<ActionErrors>({ imageError: message }, { status: 502 })
+    }
+
+    return redirect(`/app/posts/${id}`)
+  }
+
+  if (intent === "delete-image") {
+    await deletePostImage(shop.id, id, String(formData.get("imageId") ?? ""))
+    return redirect(`/app/posts/${id}`)
+  }
 
   if (intent === "delete-post") {
     await deletePost(shop.id, id)
@@ -108,6 +151,7 @@ export default function PostDetail() {
   const navigation = useNavigation()
   const errors = actionData?.errors ?? {}
   const commentErrors = actionData?.commentErrors ?? {}
+  const imageError = actionData?.imageError
   const busy = navigation.state !== "idle"
 
   const roots = post.comments.filter((c) => !c.parentId)
@@ -183,6 +227,66 @@ export default function PostDetail() {
               Author: {post.author ?? "Merchant"} · {post.comments.length} comment
               {post.comments.length === 1 ? "" : "s"}
             </span>
+          </div>
+        </Form>
+      </Card>
+
+      <Card title={`Images (${post.images.length})`}>
+        {imageError ? <Banner tone="critical">{imageError}</Banner> : null}
+
+        {post.images.length > 0 ? (
+          <div className="inline" style={{ gap: 12, marginBottom: 16, alignItems: "flex-start" }}>
+            {post.images.map((image) => (
+              <div key={image.id} style={{ width: 120 }}>
+                <img
+                  src={image.thumb}
+                  alt={image.alt ?? ""}
+                  width={120}
+                  height={120}
+                  style={{
+                    width: 120,
+                    height: 120,
+                    objectFit: "cover",
+                    borderRadius: 8,
+                    border: "1px solid var(--border)",
+                    display: "block",
+                  }}
+                />
+                <Form
+                  method="post"
+                  onSubmit={(event) => {
+                    if (!confirm("Remove this image from the post?")) event.preventDefault()
+                  }}
+                >
+                  <input type="hidden" name="intent" value="delete-image" />
+                  <input type="hidden" name="imageId" value={image.id} />
+                  <button type="submit" className="btn-link" disabled={busy}>
+                    Remove
+                  </button>
+                </Form>
+              </div>
+            ))}
+          </div>
+        ) : null}
+
+        <Form method="post" encType="multipart/form-data">
+          <input type="hidden" name="intent" value="add-image" />
+          <div className="form-row">
+            <Field
+              label="Image"
+              name="image"
+              hint="JPEG, PNG, WebP or GIF, up to 5MB. Stored in Shopify Files, not in the database."
+            >
+              <input id="image" name="image" type="file" accept="image/jpeg,image/png,image/webp,image/gif" />
+            </Field>
+            <Field label="Alt text" name="alt" hint="Describes the image for screen readers.">
+              <input id="alt" name="alt" type="text" maxLength={120} />
+            </Field>
+          </div>
+          <div className="form-actions">
+            <button type="submit" className="btn" disabled={busy}>
+              {busy ? "Uploading…" : "Upload image"}
+            </button>
           </div>
         </Form>
       </Card>

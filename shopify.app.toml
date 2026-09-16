@@ -26,7 +26,10 @@ embedded = true
 # signed proxy request and stored as an hmac. asking for customer scopes put
 # the app under protected customer data rules, which gates admin api access
 # until approved — and unapproved access comes back as a blanket 403.
-scopes = "read_products"
+# write_files is needed to upload post images into Shopify Files. it is not
+# protected customer data, so it does not reintroduce the blanket 403 that the
+# customer scopes caused.
+scopes = "read_products,write_files"
 use_legacy_install_flow = false
 
 [auth]

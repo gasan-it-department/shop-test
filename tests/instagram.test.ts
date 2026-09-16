@@ -4,6 +4,7 @@ import {
   TOKEN_REFRESH_MARGIN_MS,
   fetchMediaPage,
   isUnrecoverable,
+  mediaImageUrl,
   mediaToPost,
   needsRefresh,
   type InstagramMedia,
@@ -77,7 +78,56 @@ describe("mediaToPost", () => {
   })
 })
 
+describe("mediaImageUrl", () => {
+  it("uses media_url for a photo", () => {
+    expect(mediaImageUrl(media({ media_type: "IMAGE" }))).toBe(
+      "https://scontent.cdninstagram.com/a.jpg",
+    )
+  })
+
+  it("uses thumbnail_url for a video — media_url there is an mp4", () => {
+    // uploading the mp4 as an image fails deep inside shopify's processing
+    // with a message that does not mention video
+    const item = media({
+      media_type: "VIDEO",
+      media_url: "https://scontent.cdninstagram.com/clip.mp4",
+      thumbnail_url: "https://scontent.cdninstagram.com/clip-thumb.jpg",
+    })
+    expect(mediaImageUrl(item)).toBe("https://scontent.cdninstagram.com/clip-thumb.jpg")
+  })
+
+  it("returns null for a video with no thumbnail", () => {
+    expect(
+      mediaImageUrl(media({ media_type: "VIDEO", media_url: "x.mp4", thumbnail_url: undefined })),
+    ).toBeNull()
+  })
+
+  it("falls back to the thumbnail when a carousel has no media_url", () => {
+    expect(
+      mediaImageUrl(
+        media({ media_type: "CAROUSEL_ALBUM", media_url: undefined, thumbnail_url: "t.jpg" }),
+      ),
+    ).toBe("t.jpg")
+  })
+
+  it("returns null when there is nothing to copy", () => {
+    expect(
+      mediaImageUrl(media({ media_type: "IMAGE", media_url: undefined, thumbnail_url: undefined })),
+    ).toBeNull()
+  })
+})
+
 describe("fetchMediaPage", () => {
+  it("asks for thumbnail_url, or videos import with no picture", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(Response.json({ data: [] }))
+    await fetchMediaPage("token", null, {
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      sleep: noSleep,
+    })
+    const url = new URL(fetchImpl.mock.calls[0][0] as string)
+    expect(url.searchParams.get("fields")).toContain("thumbnail_url")
+  })
+
   it("returns a cursor only when Meta says another page exists", async () => {
     const fetchImpl = vi.fn().mockResolvedValue(
       Response.json({

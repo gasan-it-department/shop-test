@@ -119,6 +119,7 @@ model Post {
   author    Member?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
   comments  Comment[]
   reactions Reaction[]
+  images    PostImage[]
 
   @@unique([shopId, source, externalId])
   @@index([shopId, publishedAt])
@@ -142,6 +143,28 @@ model Comment {
 
   @@index([postId, createdAt])
   @@index([parentId])
+}
+
+/// An image attached to a post.
+///
+/// Only the cdn url is stored. The bytes live in Shopify Files, which means a
+/// global cdn, url-based resizing, no storage on our database, and files the
+/// merchant keeps if they uninstall the app. Storing image bytes in postgres
+/// would put every photo into every backup.
+model PostImage {
+  id        String   @id @default(cuid())
+  postId    String
+  /// cdn.shopify.com url returned by fileCreate
+  url       String
+  width     Int?
+  height    Int?
+  alt       String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, position])
 }
 
 model Reaction {

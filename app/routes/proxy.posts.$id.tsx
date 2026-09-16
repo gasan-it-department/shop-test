@@ -28,6 +28,7 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
     include: {
       category: true,
       author: true,
+      images: { orderBy: { position: "asc" } },
       comments: { orderBy: { createdAt: "asc" }, include: { author: true } },
     },
   })
@@ -42,6 +43,12 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       authorName: post.author?.displayName ?? null,
       categoryTitle: post.category.title,
       publishedAt: post.publishedAt.toISOString().slice(0, 10),
+      images: post.images.map((image) => ({
+        url: image.url,
+        width: image.width,
+        height: image.height,
+        alt: image.alt,
+      })),
       comments: post.comments.map((comment) => ({
         id: comment.id,
         body: comment.body,

@@ -8,7 +8,7 @@ import { syncAccount } from "../../app/lib/instagram-import.server"
 
 const SHOP = "instagram-test.myshopify.com"
 
-function media(id: string, caption = `Caption ${id}`) {
+function media(id: string, caption = `Caption ${id}`, overrides: Record<string, unknown> = {}) {
   return {
     id,
     caption,
@@ -16,7 +16,74 @@ function media(id: string, caption = `Caption ${id}`) {
     media_url: `https://cdn.example/${id}.jpg`,
     permalink: `https://instagram.com/p/${id}/`,
     timestamp: "2026-02-01T10:00:00+0000",
+    ...overrides,
   }
+}
+
+/** a fake admin.graphql that walks the staged-upload flow to a READY file */
+function fakeShopifyGraphql() {
+  let call = 0
+  return vi.fn(async () => {
+    call++
+    if (call === 1) {
+      return Response.json({
+        data: {
+          stagedUploadsCreate: {
+            stagedTargets: [
+              {
+                url: "https://storage.example/upload",
+                resourceUrl: "https://storage.example/resource/1",
+                parameters: [{ name: "key", value: "k" }],
+              },
+            ],
+            userErrors: [],
+          },
+        },
+      })
+    }
+    return Response.json({
+      data: {
+        fileCreate: {
+          files: [
+            {
+              id: "gid://shopify/MediaImage/1",
+              fileStatus: "READY",
+              alt: "Instagram",
+              image: { url: "https://cdn.shopify.com/ig.jpg", width: 1080, height: 1080 },
+            },
+          ],
+          userErrors: [],
+        },
+      },
+    })
+  })
+}
+
+/** graph api for media, plus the picture bytes, plus the shopify upload POST */
+function fakeNetwork(pages: Array<{ data: unknown[]; last?: boolean }>) {
+  let page = 0
+  return vi.fn(async (url: string | URL) => {
+    const href = String(url)
+
+    if (href.startsWith("https://cdn.example/")) {
+      return new Response(new Uint8Array(2048), {
+        status: 200,
+        headers: { "content-type": "image/jpeg" },
+      })
+    }
+    if (href.startsWith("https://storage.example/")) {
+      return new Response(null, { status: 201 })
+    }
+
+    const current = pages[Math.min(page, pages.length - 1)]
+    page++
+    return Response.json({
+      data: current.data,
+      paging: current.last
+        ? { cursors: { after: `c${page}` } }
+        : { cursors: { after: `c${page}` }, next: "https://graph.instagram.com/next" },
+    })
+  })
 }
 
 /** a fake graph api: one page per entry, cursors chained automatically */
@@ -180,5 +247,105 @@ describe("syncAccount", () => {
 
     const updated = await prisma.instagramAccount.findUniqueOrThrow({ where: { id: account.id } })
     expect(updated.accessToken).toBe("fresh-token")
+  })
+})
+
+describe("instagram images", () => {
+  it("copies the picture into shopify files and attaches it to the post", async () => {
+    const account = await seedAccount()
+    const result = await syncAccount(account.id, {
+      fetchImpl: fakeNetwork([{ data: [media("m1")], last: true }]) as never,
+      graphql: fakeShopifyGraphql() as never,
+    })
+
+    expect(result.images).toBe(1)
+
+    const post = await prisma.post.findFirstOrThrow({
+      where: { shop: { domain: SHOP } },
+      include: { images: true },
+    })
+    expect(post.images).toHaveLength(1)
+    // the stored url is shopify's, not instagram's â€” instagram urls expire
+    expect(post.images[0].url).toBe("https://cdn.shopify.com/ig.jpg")
+    expect(post.images[0].width).toBe(1080)
+  })
+
+  it("imports no pictures when no graphql client is supplied", async () => {
+    const account = await seedAccount()
+    const result = await syncAccount(account.id, {
+      fetchImpl: fakeNetwork([{ data: [media("m1")], last: true }]) as never,
+    })
+
+    expect(result.images).toBe(0)
+    expect(await prisma.postImage.count()).toBe(0)
+    // the post itself still imports â€” no write_files should degrade, not fail
+    expect(await prisma.post.count({ where: { shop: { domain: SHOP } } })).toBe(1)
+  })
+
+  it("does not re-upload on a second sync of the same media", async () => {
+    const account = await seedAccount()
+    const opts = { fetchImpl: fakeNetwork([{ data: [media("m1")], last: true }]) as never }
+
+    await syncAccount(account.id, { ...opts, graphql: fakeShopifyGraphql() as never })
+    const second = await syncAccount(account.id, {
+      fetchImpl: fakeNetwork([{ data: [media("m1")], last: true }]) as never,
+      graphql: fakeShopifyGraphql() as never,
+    })
+
+    expect(second.images).toBe(0)
+    expect(await prisma.postImage.count()).toBe(1)
+  })
+
+  it("keeps importing when one picture cannot be fetched", async () => {
+    const account = await seedAccount()
+    const network = vi.fn(async (url: string | URL) => {
+      const href = String(url)
+      if (href.startsWith("https://cdn.example/")) return new Response(null, { status: 404 })
+      if (href.startsWith("https://storage.example/")) return new Response(null, { status: 201 })
+      return Response.json({ data: [media("m1")], paging: { cursors: { after: "c1" } } })
+    })
+
+    const result = await syncAccount(account.id, {
+      fetchImpl: network as never,
+      graphql: fakeShopifyGraphql() as never,
+    })
+
+    expect(result.images).toBe(0)
+    expect(result.imported).toBe(1)
+  })
+
+  it("uses the thumbnail for a video rather than the mp4", async () => {
+    const account = await seedAccount()
+    const seen: string[] = []
+    const network = vi.fn(async (url: string | URL) => {
+      const href = String(url)
+      seen.push(href)
+      if (href.startsWith("https://cdn.example/") && href.includes("clip-thumb")) {
+        return new Response(new Uint8Array(1024), {
+          status: 200,
+          headers: { "content-type": "image/jpeg" },
+        })
+      }
+      if (href.startsWith("https://storage.example/")) return new Response(null, { status: 201 })
+      if (href.endsWith(".mp4")) return new Response(null, { status: 200 })
+      return Response.json({
+        data: [
+          media("v1", "A reel", {
+            media_type: "VIDEO",
+            media_url: "https://cdn.example/clip.mp4",
+            thumbnail_url: "https://cdn.example/clip-thumb.jpg",
+          }),
+        ],
+        paging: { cursors: { after: "c1" } },
+      })
+    })
+
+    const result = await syncAccount(account.id, {
+      fetchImpl: network as never,
+      graphql: fakeShopifyGraphql() as never,
+    })
+
+    expect(result.images).toBe(1)
+    expect(seen.some((u) => u.endsWith(".mp4"))).toBe(false)
   })
 })

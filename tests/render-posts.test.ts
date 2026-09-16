@@ -143,6 +143,54 @@ describe("renderPostDetail", () => {
     expect(renderPostDetail(detail(), true, "boom")).toContain(`class="ic-error"`)
   })
 
+  it("renders attached images with a responsive srcset", () => {
+    const markup = renderPostDetail(
+      detail({
+        images: [
+          { url: "https://cdn.shopify.com/a.jpg", width: 1200, height: 800, alt: "A cup" },
+        ],
+      }),
+      false,
+    )
+    expect(markup).toContain("srcset=")
+    expect(markup).toContain("width=600")
+    expect(markup).toContain('alt="A cup"')
+    expect(markup).toContain('loading="lazy"')
+  })
+
+  it("appends the resize param correctly when the url already has a query", () => {
+    const markup = renderPostDetail(
+      detail({ images: [{ url: "https://cdn.shopify.com/a.jpg?v=2", width: null, height: null, alt: null }] }),
+      false,
+    )
+    expect(markup).toContain("v=2&amp;width=1200")
+  })
+
+  it("escapes a hostile alt attribute", () => {
+    const markup = renderPostDetail(
+      detail({
+        images: [
+          { url: "https://cdn.shopify.com/a.jpg", width: 1, height: 1, alt: `" onerror="alert(1)` },
+        ],
+      }),
+      false,
+    )
+    expect(markup).not.toContain(`onerror="alert`)
+  })
+
+  it("renders no figure when there are no images", () => {
+    // the class name is always in the stylesheet, so assert on the element
+    expect(renderPostDetail(detail(), false)).not.toContain("<figure")
+  })
+
+  it("renders nothing for an image url that fails the safety check", () => {
+    const markup = renderPostDetail(
+      detail({ images: [{ url: "javascript:alert(1)", width: 1, height: 1, alt: "x" }] }),
+      false,
+    )
+    expect(markup).not.toContain("<figure")
+  })
+
   it("renders every comment", () => {
     const markup = renderPostDetail(
       detail({

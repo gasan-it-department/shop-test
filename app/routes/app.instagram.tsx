@@ -53,7 +53,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
-  const { session } = await authenticate.admin(request)
+  const { session, admin } = await authenticate.admin(request)
   const shop = await requireShop(session.shop)
 
   const formData = await request.formData()
@@ -72,10 +72,12 @@ export async function action({ request }: ActionFunctionArgs) {
     if (!account) return redirect("/app/instagram")
 
     try {
-      const result = await syncAccount(account.id)
+      // admin.graphql is what lets the import copy pictures into Shopify Files
+      const result = await syncAccount(account.id, { graphql: admin.graphql })
       const params = new URLSearchParams({
         ig_synced: String(result.imported),
         ig_updated: String(result.updated),
+        ig_images: String(result.images),
       })
       return redirect(`/app/instagram?${params.toString()}`)
     } catch (error) {
@@ -125,8 +127,9 @@ export default function Instagram() {
       ) : null}
       {synced ? (
         <Banner tone="success" title="Sync complete">
-          {synced} imported, {params.get("ig_updated") ?? 0} updated. Imported posts land in a
-          private &ldquo;Instagram&rdquo; category — make it public when you are ready.
+          {synced} imported, {params.get("ig_updated") ?? 0} updated,{" "}
+          {params.get("ig_images") ?? 0} pictures copied into Shopify Files. Imported posts land
+          in a private &ldquo;Instagram&rdquo; category — make it public when you are ready.
         </Banner>
       ) : null}
     </>

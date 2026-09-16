@@ -95,6 +95,7 @@ export async function listPosts(shopId: string, filters: PostFilters = {}) {
       include: {
         category: true,
         author: true,
+        images: { orderBy: { position: "asc" }, take: 1 },
         _count: { select: { comments: true } },
       },
     }),
@@ -109,12 +110,39 @@ export function getPost(shopId: string, id: string) {
     include: {
       category: true,
       author: true,
+      images: { orderBy: { position: "asc" } },
       comments: {
         orderBy: { createdAt: "asc" },
         include: { author: true },
       },
     },
   })
+}
+
+export async function addPostImage(
+  shopId: string,
+  postId: string,
+  image: { url: string; width: number | null; height: number | null; alt: string | null },
+) {
+  // confirm the post is this shop's before attaching — PostImage has no shopId
+  // of its own, so the scope has to be checked here
+  const post = await prisma.post.findFirst({ where: { id: postId, shopId } })
+  if (!post) return null
+
+  const count = await prisma.postImage.count({ where: { postId } })
+  return prisma.postImage.create({
+    data: { postId, position: count, ...image },
+  })
+}
+
+export async function deletePostImage(shopId: string, postId: string, imageId: string) {
+  const post = await prisma.post.findFirst({ where: { id: postId, shopId } })
+  if (!post) return false
+
+  // the bytes stay in Shopify Files. removing them there too would break any
+  // other post that reused the same url, and the merchant owns those files.
+  await prisma.postImage.deleteMany({ where: { id: imageId, postId } })
+  return true
 }
 
 export function createPost(

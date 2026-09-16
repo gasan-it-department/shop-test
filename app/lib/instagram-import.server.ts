@@ -17,15 +17,89 @@ import {
   exchangeForLongLivedToken,
   readOAuthConfig,
 } from "./instagram-oauth.server"
-import { fetchMediaPage, isUnrecoverable, mediaToPost, needsRefresh } from "./instagram.server"
+import {
+  fetchMediaPage,
+  isUnrecoverable,
+  mediaImageUrl,
+  mediaToPost,
+  needsRefresh,
+} from "./instagram.server"
 import { refreshLongLivedToken } from "./instagram.server"
+import {
+  MAX_IMAGE_BYTES,
+  uploadImageToShopify,
+  validateImage,
+  type GraphqlFn,
+} from "./shopify-files.server"
 
 export interface SyncResult {
   imported: number
   updated: number
+  images: number
   pages: number
   cursor: string | null
   tokenRefreshed: boolean
+}
+
+/**
+ * Copy one Instagram picture into Shopify Files and attach it to the post.
+ *
+ * Copied rather than hotlinked because Instagram's cdn urls are signed and
+ * expire — a forum full of dead images a fortnight after import is the
+ * failure mode, and it's silent.
+ *
+ * Returns false and logs on any problem: one unreadable picture should not
+ * fail an entire sync.
+ */
+async function copyMediaImage(
+  graphql: GraphqlFn,
+  media: { id: string; media_type: string; media_url?: string; thumbnail_url?: string },
+  postId: string,
+  fetchImpl: typeof fetch,
+): Promise<boolean> {
+  const source = mediaImageUrl(media as Parameters<typeof mediaImageUrl>[0])
+  if (!source) return false
+
+  try {
+    const response = await fetchImpl(source)
+    if (!response.ok) {
+      console.error(`[instagram] image fetch ${response.status} for ${media.id}`)
+      return false
+    }
+
+    const bytes = await response.arrayBuffer()
+    const type = response.headers.get("content-type")?.split(";")[0] ?? "image/jpeg"
+    const file = new File([bytes], `instagram-${media.id}.jpg`, { type })
+
+    const invalid = validateImage(file)
+    if (invalid) {
+      console.error(`[instagram] skipping ${media.id}: ${invalid}`)
+      return false
+    }
+
+    // pass fetchImpl through — the staged upload POST is a plain fetch, and
+    // letting it fall back to the global one means it escapes any injected
+    // network, in tests and in anything that proxies outbound traffic
+    const uploaded = await uploadImageToShopify(graphql, file, `Instagram post ${media.id}`, {
+      fetchImpl,
+    })
+
+    await prisma.postImage.create({
+      data: {
+        postId,
+        url: uploaded.url,
+        width: uploaded.width,
+        height: uploaded.height,
+        alt: uploaded.alt,
+        position: 0,
+      },
+    })
+
+    return true
+  } catch (error) {
+    console.error(`[instagram] image copy failed for ${media.id}:`, error)
+    return false
+  }
 }
 
 /** how many pages one click will walk, so a long history can't hang a request */
@@ -86,7 +160,16 @@ async function importCategory(shopId: string) {
 
 export async function syncAccount(
   accountId: string,
-  options: { fetchImpl?: typeof fetch; maxPages?: number } = {},
+  options: {
+    fetchImpl?: typeof fetch
+    maxPages?: number
+    /**
+     * `admin.graphql`. Without it the import still runs, it just brings no
+     * pictures — which is the right degradation if the shop has not granted
+     * write_files.
+     */
+    graphql?: GraphqlFn
+  } = {},
 ): Promise<SyncResult> {
   const fetchImpl = options.fetchImpl ?? fetch
   const maxPages = options.maxPages ?? MAX_PAGES_PER_RUN
@@ -106,6 +189,7 @@ export async function syncAccount(
     let cursor = account.lastCursor
     let imported = 0
     let updated = 0
+    let images = 0
     let pages = 0
 
     for (; pages < maxPages; pages++) {
@@ -130,6 +214,16 @@ export async function syncAccount(
 
         if (result.createdAt.getTime() === result.updatedAt.getTime()) imported++
         else updated++
+
+        // only on first import: re-uploading the same picture on every sync
+        // would burn the shop's file storage and the api budget for nothing
+        if (options.graphql) {
+          const existing = await prisma.postImage.count({ where: { postId: result.id } })
+          if (existing === 0) {
+            const copied = await copyMediaImage(options.graphql, media, result.id, fetchImpl)
+            if (copied) images++
+          }
+        }
       }
 
       cursor = page.nextCursor
@@ -146,11 +240,11 @@ export async function syncAccount(
       data: {
         status: "done",
         lastError: null,
-        payload: JSON.stringify({ imported, updated, pages }),
+        payload: JSON.stringify({ imported, updated, images, pages }),
       },
     })
 
-    return { imported, updated, pages, cursor, tokenRefreshed: refreshed }
+    return { imported, updated, images, pages, cursor, tokenRefreshed: refreshed }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     await prisma.importJob.update({

@@ -17,8 +17,22 @@ export interface InstagramMedia {
   caption?: string
   media_type: "IMAGE" | "VIDEO" | "CAROUSEL_ALBUM"
   media_url?: string
+  /** videos only — media_url there is the video file, not a picture */
+  thumbnail_url?: string
   permalink: string
   timestamp: string
+}
+
+/**
+ * The picture to copy for a media item, or null if there isn't one.
+ *
+ * For a VIDEO, media_url is an mp4; the still is thumbnail_url. Getting this
+ * backwards uploads a video file to Shopify as an image, which fails at the
+ * processing step with an unhelpful message.
+ */
+export function mediaImageUrl(media: InstagramMedia): string | null {
+  if (media.media_type === "VIDEO") return media.thumbnail_url ?? null
+  return media.media_url ?? media.thumbnail_url ?? null
 }
 
 export interface MediaPage {
@@ -79,7 +93,7 @@ export async function fetchMediaPage(
 ): Promise<MediaPage> {
   const params: Record<string, string> = {
     access_token: accessToken,
-    fields: "id,caption,media_type,media_url,permalink,timestamp",
+    fields: "id,caption,media_type,media_url,thumbnail_url,permalink,timestamp",
     limit: "25",
   }
   if (cursor) params.after = cursor

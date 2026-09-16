@@ -1,6 +1,6 @@
 // integration tests against a real postgres. these drive the route actions
 // exactly as react router does, so a failure here is the failure the admin
-// shows — no guessing from a status code.
+// shows â€” no guessing from a status code.
 //
 //   npm run db:local        # embedded postgres on 5433, no docker needed
 //   DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5433/postgres?pgbouncer=true&connection_limit=1"
@@ -10,7 +10,7 @@
 // pgbouncer=true is required against the embedded server: it keeps one
 // session, so prisma's prepared statements collide on reconnect.
 //
-// two tests fail against the embedded server and pass against a real one —
+// two tests fail against the embedded server and pass against a real one â€”
 // it does not round-trip a unique-constraint error over the wire protocol
 // ("unexpected message from server"), which wedges the connection for the
 // test after it. run these against the Railway database before trusting the
@@ -75,7 +75,7 @@ describe("categories action", () => {
     expect(response).toBeInstanceOf(Response)
     expect((response as Response).status).toBe(302)
 
-    const row = await prisma.category.findFirst({ where: { handle: "brewing" } })
+    const row = await prisma.category.findFirst({ where: { shop: { domain: SHOP }, handle: "brewing" } })
     expect(row?.title).toBe("Brewing")
     expect(row?.isPrivate).toBe(false)
   })
@@ -84,14 +84,14 @@ describe("categories action", () => {
     await categories.action(
       args(postRequest("/app/categories", { title: "Gear & Kit", handle: "" })),
     )
-    expect(await prisma.category.findFirst({ where: { handle: "gear-kit" } })).toBeTruthy()
+    expect(await prisma.category.findFirst({ where: { shop: { domain: SHOP }, handle: "gear-kit" } })).toBeTruthy()
   })
 
   it("stores isPrivate when the checkbox is ticked", async () => {
     await categories.action(
       args(postRequest("/app/categories", { title: "VIP", handle: "vip", isPrivate: "true" })),
     )
-    const row = await prisma.category.findFirst({ where: { handle: "vip" } })
+    const row = await prisma.category.findFirst({ where: { shop: { domain: SHOP }, handle: "vip" } })
     expect(row?.isPrivate).toBe(true)
   })
 
@@ -104,17 +104,9 @@ describe("categories action", () => {
     expect(JSON.stringify(result)).toContain("handle")
   })
 
-  it("rejects a duplicate handle with a field error, not a 500", async () => {
-    await categories.action(args(postRequest("/app/categories", { title: "Gear", handle: "gear" })))
-    const result = await categories.action(
-      args(postRequest("/app/categories", { title: "Gear again", handle: "gear" })),
-    )
-    expect(JSON.stringify(result)).toContain("already exists")
-  })
-
   it("deletes a category", async () => {
     await categories.action(args(postRequest("/app/categories", { title: "Temp", handle: "temp" })))
-    const row = await prisma.category.findFirstOrThrow({ where: { handle: "temp" } })
+    const row = await prisma.category.findFirstOrThrow({ where: { shop: { domain: SHOP }, handle: "temp" } })
 
     await categories.action(
       args(postRequest("/app/categories", { intent: "delete", id: row.id })),
@@ -139,7 +131,7 @@ describe("posts", () => {
     await categories.action(
       args(postRequest("/app/categories", { title: "Brewing", handle: "brewing" })),
     )
-    return prisma.category.findFirstOrThrow({ where: { handle: "brewing" } })
+    return prisma.category.findFirstOrThrow({ where: { shop: { domain: SHOP }, handle: "brewing" } })
   }
 
   it("creates a post and redirects to it", async () => {
@@ -154,7 +146,7 @@ describe("posts", () => {
       ),
     )
     expect((response as Response).status).toBe(302)
-    expect(await prisma.post.count()).toBe(1)
+    expect(await prisma.post.count({ where: { shop: { domain: SHOP } } })).toBe(1)
   })
 
   it("refuses a category belonging to another shop", async () => {
@@ -189,7 +181,7 @@ describe("posts", () => {
         }),
       ),
     )
-    const post = await prisma.post.findFirstOrThrow()
+    const post = await prisma.post.findFirstOrThrow({ where: { shop: { domain: SHOP } } })
 
     await postDetail.action(
       args(
@@ -211,7 +203,7 @@ describe("posts", () => {
     await postNew.action(
       args(postRequest("/app/posts/new", { title: "Thread", body: "b", categoryId: category.id })),
     )
-    const post = await prisma.post.findFirstOrThrow()
+    const post = await prisma.post.findFirstOrThrow({ where: { shop: { domain: SHOP } } })
 
     await postDetail.action(
       args(
@@ -219,7 +211,7 @@ describe("posts", () => {
         { id: post.id },
       ),
     )
-    const comment = await prisma.comment.findFirstOrThrow()
+    const comment = await prisma.comment.findFirstOrThrow({ where: { shop: { domain: SHOP } } })
     expect(comment.body).toBe("A reply")
 
     await postDetail.action(
@@ -231,7 +223,7 @@ describe("posts", () => {
         { id: post.id },
       ),
     )
-    expect(await prisma.comment.count()).toBe(0)
+    expect(await prisma.comment.count({ where: { shop: { domain: SHOP } } })).toBe(0)
   })
 
   it("deletes a post and its comments", async () => {
@@ -239,7 +231,7 @@ describe("posts", () => {
     await postNew.action(
       args(postRequest("/app/posts/new", { title: "Doomed", body: "b", categoryId: category.id })),
     )
-    const post = await prisma.post.findFirstOrThrow()
+    const post = await prisma.post.findFirstOrThrow({ where: { shop: { domain: SHOP } } })
 
     await postDetail.action(
       args(postRequest(`/app/posts/${post.id}`, { intent: "add-comment", body: "hi" }), {
@@ -250,8 +242,8 @@ describe("posts", () => {
       args(postRequest(`/app/posts/${post.id}`, { intent: "delete-post" }), { id: post.id }),
     )
 
-    expect(await prisma.post.count()).toBe(0)
-    expect(await prisma.comment.count()).toBe(0)
+    expect(await prisma.post.count({ where: { shop: { domain: SHOP } } })).toBe(0)
+    expect(await prisma.comment.count({ where: { shop: { domain: SHOP } } })).toBe(0)
   })
 
   it("lists and filters posts", async () => {
@@ -287,5 +279,19 @@ describe("category detail", () => {
     ).rejects.toBeInstanceOf(Response)
 
     await prisma.shop.delete({ where: { id: other.id } })
+  })
+})
+
+// LAST on purpose. the embedded postgres cannot round-trip a unique-constraint
+// error over the wire protocol and wedges its single connection when it hits
+// one, so every test after it fails for harness reasons rather than real ones.
+// against a real postgres this passes and the position does not matter.
+describe("duplicate handles", () => {
+  it("rejects a duplicate handle with a field error, not a 500", async () => {
+    await categories.action(args(postRequest("/app/categories", { title: "Gear", handle: "gear" })))
+    const result = await categories.action(
+      args(postRequest("/app/categories", { title: "Gear again", handle: "gear" })),
+    )
+    expect(JSON.stringify(result)).toContain("already exists")
   })
 })

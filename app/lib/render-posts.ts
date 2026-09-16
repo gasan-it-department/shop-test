@@ -1,7 +1,7 @@
 // shared by the signed proxy route and the /dev harness so there's only one
 // copy of the escaping
 
-import { cleanDisplayName, escapeHtml, html } from "./escape"
+import { cleanDisplayName, escapeHtml, html, safeUrl } from "./escape"
 
 export interface RenderablePost {
   id: string
@@ -71,6 +71,13 @@ export interface RenderableComment {
   createdAt: string
 }
 
+export interface RenderableImage {
+  url: string
+  width: number | null
+  height: number | null
+  alt: string | null
+}
+
 export interface RenderablePostDetail {
   id: string
   title: string
@@ -78,7 +85,35 @@ export interface RenderablePostDetail {
   authorName: string | null
   categoryTitle: string
   publishedAt: string
+  images?: RenderableImage[]
   comments: RenderableComment[]
+}
+
+/**
+ * Shopify's cdn resizes from the url, so a post page never has to serve a
+ * 4000px original to a phone.
+ */
+export function cdnResize(url: string, width: number): string {
+  return `${url}${url.includes("?") ? "&" : "?"}width=${width}`
+}
+
+/**
+ * Escape a url for a quoted attribute.
+ *
+ * escapeHtml also escapes `/` and `=`, which turns every url into entity soup
+ * — browsers decode it so it renders, but it is unreadable in view-source and
+ * impossible to debug. Only `&`, quotes and angle brackets can break out of a
+ * quoted attribute, so only those are escaped, and safeUrl rejects
+ * `javascript:` before any of it.
+ */
+export function attrUrl(raw: string): string {
+  const safe = safeUrl(raw)
+  if (!safe) return ""
+  return safe
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
 }
 
 // Styles for the standalone post page. Unlike the list widget there is no
@@ -124,6 +159,9 @@ const DETAIL_STYLES = `
   .ic-post__body { line-height: 1.75; white-space: pre-wrap; word-break: break-word;
                    font-size: 1.125rem; }
   .ic-post__body > * { font-size: inherit; }
+
+  .ic-figure { margin: 1.5rem 0 0; }
+  .ic-figure__img { display: block; width: 100%; height: auto; border-radius: .75rem; }
 
   .ic-comments { list-style: none; margin: 3rem 0 0; padding: 0; }
   .ic-comments:empty { display: none; }
@@ -212,6 +250,24 @@ export function renderPostDetail(
 
   const banner = error ? html`<p class="ic-error">${error}</p>` : ""
 
+  // srcset so a phone doesn't download the full-size original. width/height
+  // are set where known so the page doesn't reflow as images arrive.
+  const images = (post.images ?? [])
+    .map((image) => {
+      const src = attrUrl(cdnResize(image.url, 1200))
+      // a url safeUrl rejects renders nothing rather than a broken image
+      if (!src) return ""
+
+      const srcset = [600, 1200, 1800]
+        .map((w) => `${attrUrl(cdnResize(image.url, w))} ${w}w`)
+        .join(", ")
+
+      // alt is merchant input and goes through the aggressive escape; the url
+      // is ours and goes through the attribute-safe one
+      return `<figure class="ic-figure"><img class="ic-figure__img" src="${src}" srcset="${srcset}" sizes="(max-width: 48rem) 100vw, 48rem" alt="${escapeHtml(image.alt ?? "")}" loading="lazy" decoding="async" width="${image.width ?? 1200}" height="${image.height ?? 800}"></figure>`
+    })
+    .join("")
+
   const author = cleanDisplayName(post.authorName ?? "Member")
   const heading =
     post.comments.length === 0
@@ -235,7 +291,7 @@ export function renderPostDetail(
       <h1 class="ic-post__title">${post.title}</h1>
       <div class="ic-post__body">${post.body}</div>
     </article>
-  `
+  `.concat(images)
 
   return [
     `<style>${DETAIL_STYLES}</style>`,
