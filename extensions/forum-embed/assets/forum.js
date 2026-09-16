@@ -15,6 +15,13 @@
     "*, *::before, *::after { box-sizing: border-box; }",
 
     ".wrap {",
+    // themes do not all wrap an app section in their page container, and
+    // without this the forum runs edge to edge with the heading touching the
+    // viewport. safe either way: a theme that does centre its sections just
+    // gets a slightly narrower column.
+    "  max-width: var(--ic-max-width, 1100px);",
+    "  margin-inline: auto;",
+    "  padding-inline: clamp(16px, 4vw, 32px);",
     "  --ic-radius: 14px;",
     "  --ic-gap: 14px;",
     "  --ic-fg: #16181d;",

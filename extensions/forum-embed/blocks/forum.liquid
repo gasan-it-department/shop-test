@@ -20,6 +20,7 @@
   style="
     --ic-accent: {{ block.settings.accent_color }};
     --ic-accent-soft: {{ block.settings.accent_color | color_modify: 'alpha', 0.10 }};
+    --ic-max-width: {{ block.settings.content_width }}px;
     margin: {{ block.settings.margin_top }}px 0 {{ block.settings.margin_bottom }}px;
   "
 >
@@ -66,24 +67,38 @@
       "default": "#1a1a1a"
     },
     {
+      "type": "select",
+      "id": "content_width",
+      "label": "Content width",
+      "info": "Match this to the width your theme uses for page content.",
+      "options": [
+        { "value": "800", "label": "Narrow" },
+        { "value": "1100", "label": "Standard" },
+        { "value": "1400", "label": "Wide" },
+        { "value": "99999", "label": "Full width" }
+      ],
+      "default": "1100"
+    },
+    {
       "type": "range",
       "id": "margin_top",
       "label": "Space above",
-      "min": 0,
+      "info": "Adds to the padding the theme already applies to this section. Go negative to pull the forum back into that padding when a theme gives you no way to reduce it.",
+      "min": -80,
       "max": 96,
       "step": 4,
       "unit": "px",
-      "default": 40
+      "default": 0
     },
     {
       "type": "range",
       "id": "margin_bottom",
       "label": "Space below",
-      "min": 0,
+      "min": -80,
       "max": 96,
       "step": 4,
       "unit": "px",
-      "default": 40
+      "default": 0
     }
   ]
 }
