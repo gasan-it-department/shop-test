@@ -295,7 +295,14 @@
       headers: { accept: "application/json" },
     })
       .then(function (response) {
-        if (!response.ok) throw new Error("HTTP " + response.status)
+        if (!response.ok) {
+          // read the body before throwing: a 404 from a route that was never
+          // registered and a 401 from a signed-out shopper look identical
+          // from the status alone once this has rolled back
+          return response.text().then(function (text) {
+            throw new Error("HTTP " + response.status + " " + text.slice(0, 200))
+          })
+        }
         return response.json()
       })
       .then(function (data) {
@@ -303,11 +310,17 @@
         // between the page rendering and this tap
         setLike(button, label, !!data.liked, data.count)
       })
-      .catch(function () {
+      .catch(function (error) {
         // put it back exactly as it was. a heart left looking filled when the
         // like never saved is worse than one that visibly refuses.
         button.setAttribute("aria-pressed", wasPressed ? "true" : "false")
         if (label) label.textContent = wasLabel
+        // and say why. a heart that silently flips back is indistinguishable
+        // from a bug in the animation, which is exactly how this was first
+        // reported.
+        if (window.console && console.error) {
+          console.error("[forum] like failed:", form.action, String(error))
+        }
       })
       .then(function () {
         form.dataset.busy = ""
