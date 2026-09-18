@@ -58,6 +58,7 @@ model Shop {
   categories Category[]
   posts      Post[]
   comments   Comment[]
+  reactions  Reaction[]
   instagram  InstagramAccount?
 
   @@index([installed])
@@ -76,9 +77,10 @@ model Member {
   anonymisedAt DateTime?
   createdAt    DateTime  @default(now())
 
-  shop     Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  posts    Post[]
-  comments Comment[]
+  shop      Shop       @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  posts     Post[]
+  comments  Comment[]
+  reactions Reaction[]
 
   @@unique([shopId, shopperHash])
   @@index([shopId, anonymisedAt])
@@ -173,16 +175,33 @@ model PostImage {
   @@index([postId, position])
 }
 
+/// A like. One row per member per post per reaction kind.
+///
+/// `emoji` holds a stable token ("heart"), never an actual emoji character.
+/// "❤" and "❤️" differ by a variant selector (U+FE0F), so two code paths
+/// disagreeing about which one they write would both satisfy the unique
+/// constraint and the post would count the same person twice.
+///
+/// The unique constraint is what makes the toggle safe to hammer: a double
+/// tap can't produce two rows, so the endpoint never has to lock.
 model Reaction {
   id        String   @id @default(cuid())
+  shopId    String
   postId    String
   memberId  String
   emoji     String
   createdAt DateTime @default(now())
 
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  shop   Shop   @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  post   Post   @relation(fields: [postId], references: [id], onDelete: Cascade)
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
   @@unique([postId, memberId, emoji])
+  // counting the hearts on a post, and listing the ones a member left, are the
+  // only two reads — one index each
+  @@index([postId, emoji])
+  @@index([memberId])
+  @@index([shopId])
 }
 
 // --- instagram import -------------------------------------------------------

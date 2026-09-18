@@ -47,6 +47,8 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       source: post.source,
       externalId: post.externalId,
       author: post.author?.displayName ?? null,
+      authorId: post.authorId,
+      likes: post._count.reactions,
       anonymised: post.author?.anonymisedAt !== null && post.author?.anonymisedAt !== undefined,
       publishedAt: post.publishedAt.toISOString(),
       updatedAt: post.updatedAt.toISOString(),
@@ -220,11 +222,17 @@ export default function PostDetail() {
 
           <div className="form-actions">
             <button type="submit" className="btn btn--primary" disabled={busy}>
-              {busy ? "SavingÃ¢â‚¬Â¦" : "Save changes"}
+              {busy ? "Saving…" : "Save changes"}
             </button>
             <span className="cell-muted">
-              Author: {post.author ?? "Merchant"} Ã‚Â· {post.comments.length} comment
-              {post.comments.length === 1 ? "" : "s"}
+              Author:{" "}
+              {post.authorId ? (
+                <Link to={`/app/members/${post.authorId}`}>{post.author ?? "Member"}</Link>
+              ) : (
+                (post.author ?? "Merchant")
+              )}{" "}
+              · {post.comments.length} comment{post.comments.length === 1 ? "" : "s"} ·{" "}
+              {post.likes} like{post.likes === 1 ? "" : "s"}
             </span>
           </div>
         </Form>
@@ -284,7 +292,7 @@ export default function PostDetail() {
           </div>
           <div className="form-actions">
             <button type="submit" className="btn" disabled={busy}>
-              {busy ? "UploadingÃ¢â‚¬Â¦" : "Upload image"}
+              {busy ? "Uploading…" : "Upload image"}
             </button>
           </div>
         </Form>
@@ -326,7 +334,7 @@ export default function PostDetail() {
           </Field>
           <div className="form-actions">
             <button type="submit" className="btn btn--primary" disabled={busy}>
-              {busy ? "PostingÃ¢â‚¬Â¦" : "Post comment"}
+              {busy ? "Posting…" : "Post comment"}
             </button>
           </div>
         </Form>

@@ -65,6 +65,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       category: post.category.title,
       author: post.author?.displayName ?? "Member",
       comments: post._count.comments,
+      likes: post._count.reactions,
       publishedAt: post.publishedAt.toISOString(),
     })),
   }
@@ -98,6 +99,7 @@ export default function Overview() {
         <dl className="stats">
           <Stat label="Posts" value={counts.posts} />
           <Stat label="Comments" value={counts.comments} />
+          <Stat label="Likes" value={counts.likes} />
           <Stat label="Members" value={counts.members} />
           <Stat label="Categories" value={counts.categories} />
         </dl>
@@ -145,6 +147,11 @@ export default function Overview() {
               </pre>
             </>
           ) : null}
+          <p className="cell-muted" style={{ marginBottom: 0 }}>
+            This is one call and whatever it returned. <Link to="/app/diagnostics">Diagnostics</Link>{" "}
+            runs five, ordered so each failure narrows the cause — and captures the request ids,
+            which are the only thing a 403 with an empty body leaves to go on.
+          </p>
         </Card>
       ) : null}
 
@@ -177,6 +184,7 @@ export default function Overview() {
                   <th>Category</th>
                   <th>Author</th>
                   <th>Comments</th>
+                  <th>Likes</th>
                   <th>Published</th>
                 </tr>
               </thead>
@@ -191,6 +199,7 @@ export default function Overview() {
                     <td className="cell-muted">{post.category}</td>
                     <td className="cell-muted">{post.author}</td>
                     <td className="cell-muted">{post.comments}</td>
+                    <td className="cell-muted">{post.likes}</td>
                     <td className="cell-muted">{formatDate(post.publishedAt, timezone)}</td>
                   </tr>
                 ))}

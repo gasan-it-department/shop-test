@@ -9,7 +9,7 @@ import type { LoaderFunctionArgs } from "react-router"
 
 import prisma from "../db.server"
 import { assertDevHarness } from "../lib/dev-mode.server"
-import { imageSrc } from "../lib/forum.server"
+import { imageSrc, likeSummary } from "../lib/forum.server"
 import { renderPostDetail } from "../lib/render-posts"
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
@@ -28,10 +28,14 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 
   if (!post) return new Response("Not found", { status: 404 })
 
+  const like = (await likeSummary([post.id], url.searchParams.get("member"))).get(post.id)
+
   const markup = renderPostDetail(
     {
       id: post.id,
       title: post.title,
+      likeCount: like?.count ?? 0,
+      liked: like?.liked ?? false,
       body: post.body,
       authorName: post.author?.displayName ?? null,
       categoryTitle: post.category.title,
@@ -48,6 +52,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
       comments: post.comments.map((comment) => ({
         id: comment.id,
         body: comment.body,
+        parentId: comment.parentId,
         authorName: comment.author?.displayName ?? null,
         createdAt: comment.createdAt.toISOString().slice(0, 10),
       })),
@@ -56,6 +61,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     // shopify puts logged_in_customer_id on the proxied request
     url.searchParams.get("signedin") === "1",
     url.searchParams.get("error"),
+    url.searchParams.get("reply"),
   )
 
   // a minimal stand-in for the theme layout: a font and a background, nothing

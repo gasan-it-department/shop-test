@@ -6,7 +6,7 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router"
 
 import prisma from "../db.server"
 import { cleanDisplayName } from "../lib/escape"
-import { imageSrc } from "../lib/forum.server"
+import { imageSrc, likeSummary } from "../lib/forum.server"
 import { shopperHash } from "../lib/privacy.server"
 import { renderPostDetail } from "../lib/render-posts"
 import { commentSchema, parseForm } from "../lib/validation"
@@ -36,10 +36,25 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
 
   if (!post) return new Response("Not found", { status: 404 })
 
+  const member = customerId
+    ? await prisma.member.findUnique({
+        where: {
+          shopId_shopperHash: {
+            shopId: post.shopId,
+            shopperHash: shopperHash(session.shop, customerId),
+          },
+        },
+        select: { id: true },
+      })
+    : null
+  const like = (await likeSummary([post.id], member?.id ?? null)).get(post.id)
+
   const markup = renderPostDetail(
     {
       id: post.id,
       title: post.title,
+      likeCount: like?.count ?? 0,
+      liked: like?.liked ?? false,
       body: post.body,
       authorName: post.author?.displayName ?? null,
       categoryTitle: post.category.title,
@@ -57,12 +72,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
       comments: post.comments.map((comment) => ({
         id: comment.id,
         body: comment.body,
+        parentId: comment.parentId,
         authorName: comment.author?.displayName ?? null,
         createdAt: comment.createdAt.toISOString().slice(0, 10),
       })),
     },
     Boolean(customerId),
     url.searchParams.get("error"),
+    url.searchParams.get("reply"),
   )
 
   // WITH the theme layout, unlike the list fragment. this is a full page the
@@ -77,7 +94,14 @@ export async function loader({ request, params }: LoaderFunctionArgs) {
  * submissions with a redirect back to the post (post/redirect/get) and keep
  * JSON for anything calling this with fetch.
  */
-function respond(request: Request, postId: string, payload: unknown, status: number) {
+function respond(
+  request: Request,
+  postId: string,
+  payload: unknown,
+  status: number,
+  /** the comment being replied to, so a rejected reply reopens its own box */
+  parentId?: string | null,
+) {
   const wantsHtml = request.headers.get("accept")?.includes("text/html")
   if (!wantsHtml) return Response.json(payload, { status })
 
@@ -88,6 +112,9 @@ function respond(request: Request, postId: string, payload: unknown, status: num
         ? String((payload as { error: unknown }).error)
         : Object.values((payload as { errors?: Record<string, string> }).errors ?? {})[0]
     if (message) target.searchParams.set("error", message)
+    // on success the reply param is deliberately dropped — the box has served
+    // its purpose and the reply is now in the thread
+    if (parentId) target.searchParams.set("reply", parentId)
   }
 
   return new Response(null, {
@@ -109,9 +136,13 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 
   const formData = await request.formData()
+  // read straight off the form for the error path: parsed.data does not exist
+  // yet when validation is what failed
+  const submittedParent = String(formData.get("parentId") ?? "") || null
+
   const parsed = parseForm(commentSchema, formData)
   if (!parsed.ok) {
-    return respond(request, postId, { errors: parsed.errors }, 422)
+    return respond(request, postId, { errors: parsed.errors }, 422, submittedParent)
   }
 
   const shop = await prisma.shop.findUnique({ where: { domain: session.shop } })

@@ -118,14 +118,54 @@
     ".ic-card__link:hover .ic-card__photo { opacity: .94; }",
 
     // --- card foot ---
-    ".ic-card__foot { display: flex; align-items: center; gap: 14px;",
-    "                 padding: 11px 16px; font-size: 13px; color: var(--ic-muted); }",
+    ".ic-card__foot { display: flex; align-items: center; gap: 10px;",
+    "                 padding: 6px 10px 6px 6px; font-size: 13px; color: var(--ic-muted); }",
     ".ic-card__media + .ic-card__foot { border-top: 1px solid var(--ic-faint); }",
+    ".ic-card__replies { margin-left: auto; color: inherit; text-decoration: none; }",
+    ".ic-card__replies:hover { text-decoration: underline; }",
     // a speech bubble drawn in css, so the markup carries no decorative text
     ".ic-card__replies::before { content: ''; display: inline-block;",
     "                            width: 13px; height: 11px; margin-right: 7px;",
     "                            vertical-align: -1px; border: 1.5px solid currentColor;",
     "                            border-radius: 4px 4px 4px 0; opacity: .7; }",
+
+    // --- the heart ---
+    // the one deliberately un-themed colour in the widget. a filled and an
+    // unfilled heart have to be distinguishable at a glance, and "the theme's
+    // text colour, but heavier" is not a state change anyone can see.
+    ".ic-like { margin: 0; display: inline-flex; }",
+    ".ic-like__btn { display: inline-flex; align-items: center; justify-content: center;",
+    "                width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%;",
+    "                background: transparent; color: inherit; cursor: pointer;",
+    "                text-decoration: none; -webkit-tap-highlight-color: transparent; }",
+    ".ic-like__btn:hover { background: var(--ic-hover); }",
+    ".ic-like__btn:focus-visible { outline: 2px solid var(--ic-accent, currentColor);",
+    "                              outline-offset: 2px; }",
+    ".ic-heart { width: 21px; height: 21px; display: block;",
+    "            transition: transform .18s ease, fill .18s ease, stroke .18s ease; }",
+    ".ic-like__btn[aria-pressed='true'] .ic-heart { fill: #ed4956; stroke: #ed4956; }",
+    ".ic-like__count { font-weight: 600; color: var(--ic-fg); }",
+    // no likes yet means no label at all, rather than a lonely "0 likes"
+    ".ic-like__count:empty { display: none; }",
+    // added by script on toggle, removed when the animation ends
+    ".ic-like__btn[data-pop] .ic-heart { animation: ic-pop .3s ease; }",
+    "@keyframes ic-pop { 0% { transform: scale(1) } 35% { transform: scale(1.28) }",
+    "                    65% { transform: scale(.92) } 100% { transform: scale(1) } }",
+    "@media (prefers-reduced-motion: reduce) {",
+    "  .ic-heart { transition: none; }",
+    "  .ic-like__btn[data-pop] .ic-heart { animation: none; }",
+    "}",
+
+    // --- comment preview ---
+    ".ic-card__preview { padding: 0 16px 14px; display: grid; gap: 4px; }",
+    ".ic-card__viewall { font-size: 13.5px; color: var(--ic-muted); text-decoration: none;",
+    "                    justify-self: start; }",
+    ".ic-card__viewall:hover { text-decoration: underline; }",
+    ".ic-card__comment { margin: 0; font-size: 14px; line-height: 1.45;",
+    // one line each: the preview is a taste of the thread, and a card that
+    // grows with a rambling comment pushes the next post off the screen
+    "                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }",
+    ".ic-card__comment-who { font-weight: 600; margin-right: 5px; }",
 
     // --- states ---
     ".state { border: 1px solid var(--ic-faint); border-radius: var(--ic-radius);",
@@ -156,7 +196,8 @@
     "  .ic-avatar { width: 34px; height: 34px; font-size: 12px; }",
     "  .ic-card__title { font-size: 16px; padding: 0 14px 7px; }",
     "  .ic-card__excerpt { margin-bottom: 12px; padding: 0 14px; }",
-    "  .ic-card__foot { padding: 10px 14px; }",
+    "  .ic-card__foot { padding: 5px 12px 5px 5px; }",
+    "  .ic-card__preview { padding: 0 14px 12px; }",
     "}",
   ].join("\n")
 
@@ -191,6 +232,100 @@
     return box
   }
 
+  // --- likes ----------------------------------------------------------------
+
+  // Must match likeLabel() in app/lib/render-posts.ts. The server renders the
+  // first label and this renders every one after it, so if the two disagree
+  // the text changes the moment anyone taps. Kept as two small functions
+  // rather than shipping the wording in a data attribute, which would put it
+  // in the markup three times instead of two.
+  function likeLabel(count) {
+    if (count <= 0) return ""
+    return count === 1 ? "1 like" : count + " likes"
+  }
+
+  function countFrom(label) {
+    var n = parseInt(label, 10)
+    return isNaN(n) ? 0 : n
+  }
+
+  function setLike(button, label, liked, count) {
+    button.setAttribute("aria-pressed", liked ? "true" : "false")
+    if (label) label.textContent = likeLabel(count)
+  }
+
+  function pop(button) {
+    button.removeAttribute("data-pop")
+    // read back a layout property so the browser starts a new animation
+    // instead of continuing the one that is already running
+    void button.offsetWidth
+    button.setAttribute("data-pop", "")
+    var clear = function () {
+      button.removeAttribute("data-pop")
+    }
+    button.addEventListener("animationend", clear, { once: true })
+    // animationend never fires under prefers-reduced-motion, where the rule is
+    // animation: none — without this the attribute would stay forever
+    setTimeout(clear, 400)
+  }
+
+  function submitLike(form) {
+    var button = form.querySelector(".ic-like__btn")
+    if (!button) return
+    // a tap while the last one is still in flight is dropped rather than
+    // queued: two toggles racing would land in whichever order the network
+    // decided, and the heart would settle on a state nobody asked for
+    if (form.dataset.busy === "1") return
+
+    var foot = form.parentNode
+    var label = foot ? foot.querySelector("[data-like-count]") : null
+
+    var wasPressed = button.getAttribute("aria-pressed") === "true"
+    var wasLabel = label ? label.textContent : ""
+
+    // optimistic: the heart fills on the tap, not on the round trip. a like
+    // that waits for the network feels broken on a phone.
+    setLike(button, label, !wasPressed, countFrom(wasLabel) + (wasPressed ? -1 : 1))
+    pop(button)
+
+    form.dataset.busy = "1"
+    fetch(form.action, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { accept: "application/json" },
+    })
+      .then(function (response) {
+        if (!response.ok) throw new Error("HTTP " + response.status)
+        return response.json()
+      })
+      .then(function (data) {
+        // the server's count wins: someone else may have liked the post
+        // between the page rendering and this tap
+        setLike(button, label, !!data.liked, data.count)
+      })
+      .catch(function () {
+        // put it back exactly as it was. a heart left looking filled when the
+        // like never saved is worse than one that visibly refuses.
+        button.setAttribute("aria-pressed", wasPressed ? "true" : "false")
+        if (label) label.textContent = wasLabel
+      })
+      .then(function () {
+        form.dataset.busy = ""
+      })
+  }
+
+  // one delegated listener, bound once to the container that survives every
+  // re-render. per-button listeners would have to be re-attached each time the
+  // feed is replaced, and the ones on the old nodes would leak.
+  function bindLikes(body) {
+    body.addEventListener("submit", function (event) {
+      var form = event.target
+      if (!form || !form.matches || !form.matches("[data-like-form]")) return
+      event.preventDefault()
+      submitLike(form)
+    })
+  }
+
   function mount(root) {
     if (root.dataset.forumMounted === "1") return
     root.dataset.forumMounted = "1"
@@ -217,6 +352,7 @@
 
     var body = document.createElement("div")
     body.appendChild(skeleton())
+    bindLikes(body)
 
     wrap.appendChild(head)
     wrap.appendChild(body)

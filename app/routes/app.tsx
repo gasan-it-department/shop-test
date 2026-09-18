@@ -25,10 +25,12 @@ export default function App() {
           Overview
         </Link>
         <Link to="/app/posts">Posts</Link>
+        <Link to="/app/comments">Comments</Link>
         <Link to="/app/categories">Categories</Link>
         <Link to="/app/members">Members</Link>
         <Link to="/app/instagram">Instagram</Link>
         <Link to="/app/billing">Plan</Link>
+        <Link to="/app/diagnostics">Diagnostics</Link>
       </NavMenu>
       <Outlet />
     </AppProvider>

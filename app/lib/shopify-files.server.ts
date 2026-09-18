@@ -56,10 +56,36 @@ export class ImageUploadError extends Error {
  * `Response { status: 403, body: ReadableStream }` — which says nothing. The
  * reason is in the body, and it has to be read before it is any use.
  */
+/**
+ * Headers worth keeping off a failed Admin API response.
+ *
+ * x-request-id is the important one: Shopify can trace a refusal by it, and on
+ * a 403 with an empty body it is often the only thing that identifies the
+ * request at all. The rest explain throttling and deprecation.
+ */
+const DIAGNOSTIC_HEADERS = [
+  "x-request-id",
+  "www-authenticate",
+  "x-shopify-api-version",
+  "x-shopify-api-deprecated-reason",
+  "x-shopify-shop-api-call-limit",
+  "retry-after",
+]
+
 export async function describeAdminError(error: unknown): Promise<string> {
   if (error instanceof Response) {
     const text = await error.text().catch(() => "")
-    return `HTTP ${error.status} ${text}`.trim()
+    // a 403 from the Admin API frequently has an empty body, so status and
+    // body alone say nothing. the headers are what is left to go on.
+    const headers = DIAGNOSTIC_HEADERS.map((name) => {
+      const value = error.headers.get(name)
+      return value ? `${name}: ${value}` : null
+    }).filter(Boolean)
+
+    return [`HTTP ${error.status}`, text, headers.join("; ")]
+      .filter((part) => part && part.length > 0)
+      .join(" ")
+      .trim()
   }
   if (error instanceof Error) return error.message
   return String(error)

@@ -1,9 +1,16 @@
+// Every comment on the forum, newest first.
+//
+// Comment moderation already existed on the post page, but only there — which
+// works when you already know which post the problem is on. This is the view
+// for the question a merchant actually has: what has just been said anywhere
+// on my community.
+
 import { Form, Link, useLoaderData, useNavigation, useSearchParams } from "react-router"
 import { redirect } from "react-router"
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router"
 
 import { Badge, Card, EmptyState, PageHeader, formatDate } from "../components/ui"
-import { deletePost, listCategories, listPosts, requireShop } from "../lib/forum.server"
+import { deleteComment, listComments, requireShop } from "../lib/forum.server"
 import { authenticate } from "../shopify.server"
 
 const PAGE_SIZE = 25
@@ -14,30 +21,31 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const url = new URL(request.url)
   const search = url.searchParams.get("q")?.trim() || undefined
-  const categoryId = url.searchParams.get("category") || undefined
+  const postId = url.searchParams.get("post") || undefined
   const page = Math.max(1, Number(url.searchParams.get("page") ?? 1) || 1)
 
-  const [{ items, total }, categories] = await Promise.all([
-    listPosts(shop.id, { search, categoryId, take: PAGE_SIZE, skip: (page - 1) * PAGE_SIZE }),
-    listCategories(shop.id),
-  ])
+  const { items, total } = await listComments(shop.id, {
+    search,
+    postId,
+    take: PAGE_SIZE,
+    skip: (page - 1) * PAGE_SIZE,
+  })
 
   return {
     timezone: shop.timezone,
     page,
     pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
     total,
-    categories: categories.map((c) => ({ id: c.id, title: c.title })),
-    posts: items.map((post) => ({
-      id: post.id,
-      title: post.title,
-      category: post.category.title,
-      isPrivate: post.category.isPrivate,
-      author: post.author?.displayName ?? "Member",
-      source: post.source,
-      comments: post._count.comments,
-      likes: post._count.reactions,
-      publishedAt: post.publishedAt.toISOString(),
+    comments: items.map((comment) => ({
+      id: comment.id,
+      body: comment.body,
+      authorId: comment.authorId,
+      author: comment.author?.displayName ?? "Member",
+      anonymised: comment.author?.anonymisedAt != null,
+      isReply: comment.parentId !== null,
+      postId: comment.post.id,
+      postTitle: comment.post.title,
+      createdAt: comment.createdAt.toISOString(),
     })),
   }
 }
@@ -48,124 +56,105 @@ export async function action({ request }: ActionFunctionArgs) {
 
   const formData = await request.formData()
   if (formData.get("intent") === "delete") {
-    await deletePost(shop.id, String(formData.get("id") ?? ""))
+    // scoped on shopId — a guessed id from another shop deletes nothing
+    await deleteComment(shop.id, String(formData.get("id") ?? ""))
   }
 
-  // keep the filters the user was looking at
-  const redirectTo = String(formData.get("redirectTo") || "/app/posts")
-  return redirect(redirectTo)
+  return redirect(String(formData.get("redirectTo") || "/app/comments"))
 }
 
-export default function Posts() {
-  const { posts, categories, timezone, page, pageCount, total } = useLoaderData<typeof loader>()
+export default function Comments() {
+  const { comments, timezone, page, pageCount, total } = useLoaderData<typeof loader>()
   const [searchParams] = useSearchParams()
   const navigation = useNavigation()
   const busy = navigation.state !== "idle"
 
   const currentQuery = searchParams.get("q") ?? ""
-  const currentCategory = searchParams.get("category") ?? ""
-  const redirectTo = `/app/posts?${searchParams.toString()}`
+  const currentPost = searchParams.get("post") ?? ""
+  const filtered = Boolean(currentQuery || currentPost)
+  const redirectTo = `/app/comments?${searchParams.toString()}`
 
   return (
     <div className="page">
-      <PageHeader
-        title="Posts"
-        subtitle={`${total} post${total === 1 ? "" : "s"}`}
-        action={
-          <Link to="/app/posts/new" className="btn btn--primary">
-            New post
-          </Link>
-        }
-      />
+      <PageHeader title="Comments" subtitle={`${total} comment${total === 1 ? "" : "s"}`} />
 
       <Card>
         <Form method="get" className="inline">
           <input
             type="text"
             name="q"
-            placeholder="Search titles and bodies"
+            placeholder="Search comment text"
             defaultValue={currentQuery}
-            style={{ maxWidth: 280 }}
+            style={{ maxWidth: 320 }}
           />
-          <select name="category" defaultValue={currentCategory} style={{ maxWidth: 200 }}>
-            <option value="">All categories</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.title}
-              </option>
-            ))}
-          </select>
+          {/* carried through so "comments on this post" keeps its filter when
+              the merchant searches within it */}
+          {currentPost ? <input type="hidden" name="post" value={currentPost} /> : null}
           <button type="submit" className="btn" disabled={busy}>
-            Filter
+            Search
           </button>
-          {currentQuery || currentCategory ? (
-            <Link to="/app/posts" className="btn-link">
+          {filtered ? (
+            <Link to="/app/comments" className="btn-link">
               Clear
             </Link>
           ) : null}
         </Form>
       </Card>
 
-      <Card title="All posts" flush>
-        {posts.length === 0 ? (
-          <EmptyState
-            title={currentQuery || currentCategory ? "No posts match" : "No posts yet"}
-            action={
-              <Link to="/app/posts/new" className="btn btn--primary">
-                New post
-              </Link>
-            }
-          >
-            {currentQuery || currentCategory
-              ? "Try a different search or category."
-              : "Posts written here and from the storefront both appear in this list."}
+      <Card title="Newest first" flush>
+        {comments.length === 0 ? (
+          <EmptyState title={filtered ? "No comments match" : "No comments yet"}>
+            {filtered
+              ? "Try a different search."
+              : "Comments left by shoppers on the storefront appear here."}
           </EmptyState>
         ) : (
           <div className="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Title</th>
-                  <th>Category</th>
+                  <th>Comment</th>
                   <th>Author</th>
-                  <th>Source</th>
-                  <th>Comments</th>
-                  <th>Likes</th>
-                  <th>Published</th>
+                  <th>On</th>
+                  <th>Posted</th>
                   <th />
                 </tr>
               </thead>
               <tbody>
-                {posts.map((post) => (
-                  <tr key={post.id}>
+                {comments.map((comment) => (
+                  <tr key={comment.id}>
                     <td>
-                      <Link to={`/app/posts/${post.id}`} className="cell-title">
-                        {post.title}
+                      {comment.body}{" "}
+                      {comment.isReply ? <Badge tone="neutral">Reply</Badge> : null}
+                    </td>
+                    <td>
+                      {comment.authorId ? (
+                        <Link to={`/app/members/${comment.authorId}`} className="cell-title">
+                          {comment.author}
+                        </Link>
+                      ) : (
+                        <span className="cell-muted">{comment.author}</span>
+                      )}{" "}
+                      {comment.anonymised ? <Badge tone="neutral">Redacted</Badge> : null}
+                    </td>
+                    <td>
+                      <Link to={`/app/posts/${comment.postId}`} className="cell-title">
+                        {comment.postTitle}
                       </Link>
                     </td>
-                    <td>
-                      <span className="cell-muted">{post.category}</span>{" "}
-                      {post.isPrivate ? <Badge tone="warning">Private</Badge> : null}
-                    </td>
-                    <td className="cell-muted">{post.author}</td>
-                    <td>
-                      <Badge tone="neutral">{post.source}</Badge>
-                    </td>
-                    <td className="cell-muted">{post.comments}</td>
-                    <td className="cell-muted">{post.likes}</td>
-                    <td className="cell-muted">{formatDate(post.publishedAt, timezone)}</td>
+                    <td className="cell-muted">{formatDate(comment.createdAt, timezone)}</td>
                     <td className="actions">
                       <Form
                         method="post"
                         style={{ display: "inline" }}
                         onSubmit={(event) => {
-                          if (!confirm(`Delete "${post.title}"? This cannot be undone.`)) {
+                          if (!confirm("Delete this comment? This cannot be undone.")) {
                             event.preventDefault()
                           }
                         }}
                       >
                         <input type="hidden" name="intent" value="delete" />
-                        <input type="hidden" name="id" value={post.id} />
+                        <input type="hidden" name="id" value={comment.id} />
                         <input type="hidden" name="redirectTo" value={redirectTo} />
                         <button type="submit" className="btn btn--sm btn--danger" disabled={busy}>
                           Delete
@@ -218,7 +207,7 @@ function PageLink({
   const next = new URLSearchParams(params)
   next.set("page", String(page))
   return (
-    <Link to={`/app/posts?${next.toString()}`} className="btn btn--sm">
+    <Link to={`/app/comments?${next.toString()}`} className="btn btn--sm">
       {children}
     </Link>
   )

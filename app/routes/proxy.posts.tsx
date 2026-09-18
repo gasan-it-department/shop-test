@@ -7,10 +7,13 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router"
 
 import prisma from "../db.server"
 import { cleanDisplayName, safeUrl } from "../lib/escape"
-import { imageSrc } from "../lib/forum.server"
+import { imageSrc, likeSummary } from "../lib/forum.server"
 import { shopperHash } from "../lib/privacy.server"
 import { excerptOf, renderPostList } from "../lib/render-posts"
 import { appUrl, authenticate } from "../shopify.server"
+
+/** how many comments a feed card shows under the photo */
+const COMMENT_PREVIEW = 2
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session, liquid } = await authenticate.public.appProxy(request)
@@ -22,10 +25,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const url = new URL(request.url)
   const category = url.searchParams.get("category")
+  const customerId = url.searchParams.get("logged_in_customer_id")
+
+  const shop = await prisma.shop.findUnique({
+    where: { domain: session.shop },
+    select: { id: true },
+  })
+  if (!shop) return new Response("Not found", { status: 404 })
 
   const posts = await prisma.post.findMany({
     where: {
-      shop: { domain: session.shop },
+      shopId: shop.id,
       // private categories never leave the db on a public endpoint
       category: { isPrivate: false, ...(category ? { handle: category } : {}) },
     },
@@ -35,23 +45,63 @@ export async function loader({ request }: LoaderFunctionArgs) {
       author: true,
       category: true,
       images: { orderBy: { position: "asc" }, take: 1 },
+      // newest two, reversed below — "take the last two" is a descending take,
+      // there is no ascending version of it that doesn't read every comment
+      comments: {
+        orderBy: { createdAt: "desc" },
+        take: COMMENT_PREVIEW,
+        include: { author: true },
+      },
       _count: { select: { comments: true } },
     },
   })
 
+  // the member row is only needed to answer "did I like this", so an anonymous
+  // visitor costs no extra query and no member row gets created by a read
+  const member = customerId
+    ? await prisma.member.findUnique({
+        where: {
+          shopId_shopperHash: {
+            shopId: shop.id,
+            shopperHash: shopperHash(session.shop, customerId),
+          },
+        },
+        select: { id: true },
+      })
+    : null
+
+  const likes = await likeSummary(
+    posts.map((post) => post.id),
+    member?.id ?? null,
+  )
+
   const markup = renderPostList(
-    posts.map((post) => ({
-      id: post.id,
-      title: post.title,
-      authorName: post.author?.displayName ?? null,
-      categoryTitle: post.category.title,
-      commentCount: post._count.comments,
-      excerpt: excerptOf(post.body),
-      // absolute: this fragment is injected into a page on the shop's domain,
-      // so a relative /images/... path would resolve against the shop
-      imageUrl: post.images[0] ? imageSrc(post.images[0], appUrl) : null,
-    })),
+    posts.map((post) => {
+      const like = likes.get(post.id)
+      return {
+        id: post.id,
+        title: post.title,
+        authorName: post.author?.displayName ?? null,
+        categoryTitle: post.category.title,
+        commentCount: post._count.comments,
+        excerpt: excerptOf(post.body),
+        likeCount: like?.count ?? 0,
+        liked: like?.liked ?? false,
+        // back to oldest-first, the order they'd be read in
+        comments: post.comments
+          .slice()
+          .reverse()
+          .map((comment) => ({
+            authorName: comment.author?.displayName ?? null,
+            body: comment.body,
+          })),
+        // absolute: this fragment is injected into a page on the shop's domain,
+        // so a relative /images/... path would resolve against the shop
+        imageUrl: post.images[0] ? imageSrc(post.images[0], appUrl) : null,
+      }
+    }),
     session.shop,
+    Boolean(customerId),
   )
 
   // layout: false returns the fragment alone. with the theme layout we'd nest
